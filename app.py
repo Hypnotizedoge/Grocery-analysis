@@ -290,6 +290,8 @@ with st.sidebar:
     store_names = [s["name"] for s in stores]
     store_map = {s["name"]: s["id"] for s in stores}
 
+    selected_store_name = None
+
     if stores:
         selected_store_name = st.selectbox(
             "Grocery Store",
@@ -300,12 +302,12 @@ with st.sidebar:
         selected_store_id = store_map[selected_store_name]
         st.session_state.selected_store_id = selected_store_id
     else:
-        st.warning("No stores found. Add one below.")
         selected_store_id = None
 
     # ── Add new store ──
-    with st.expander("➕ Add New Store"):
-        new_store_name = st.text_input("Store Name", key="new_store_input", placeholder="e.g. AllDay Supermarket")
+    # Show prominently when no stores exist, otherwise in expander
+    def _add_store_form():
+        new_store_name = st.text_input("Store Name", key="new_store_input", placeholder="e.g. SM Supermarket, Puregold...")
         if st.button("Add Store", key="add_store_btn", use_container_width=True):
             if new_store_name.strip():
                 try:
@@ -316,6 +318,13 @@ with st.sidebar:
                     st.error(f"Store already exists or error: {e}")
             else:
                 st.warning("Enter a store name")
+
+    if not stores:
+        st.info("👋 **Welcome!** Add your first grocery store to get started.")
+        _add_store_form()
+    else:
+        with st.expander("➕ Add New Store"):
+            _add_store_form()
 
     st.markdown("---")
 
@@ -368,7 +377,7 @@ st.markdown("")
 # ── Tabs ──
 tab_dashboard, tab_ocr, tab_manual = st.tabs([
     "📋 Price Dashboard",
-    "📸 Scan Receipt",
+    "📸 Scan Price Label",
     "✏️ Manual Entry",
 ])
 
@@ -398,7 +407,7 @@ with tab_dashboard:
             <div class="glass-card" style="text-align: center; padding: 60px 24px;">
                 <div style="font-size: 4rem; margin-bottom: 16px;">📦</div>
                 <h3 style="color: #94a3b8; margin-bottom: 8px;">No products yet</h3>
-                <p style="color: #64748b;">Add products using the <strong>Manual Entry</strong> tab or <strong>Scan a Receipt</strong> to get started.</p>
+                <p style="color: #64748b;">Add products using the <strong>Manual Entry</strong> tab or <strong>Scan a Price Label</strong> to get started.</p>
             </div>
             """, unsafe_allow_html=True)
         else:
@@ -555,162 +564,194 @@ with tab_dashboard:
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# TAB 2: SCAN RECEIPT (OCR)
+# TAB 2: SCAN PRICE LABEL (OCR)
 # ═══════════════════════════════════════════════════════════════════════════════
 
 with tab_ocr:
-    st.markdown("### 📸 Scan Grocery Receipt")
-    st.caption("Upload a photo of your receipt. The app will extract text using Tesseract OCR.")
+    st.markdown("### 📸 Scan Price Label")
+    st.caption("Snap or upload a photo of a shelf price tag. OCR will extract the text so you can quickly fill in the product details.")
 
-    # Check Tesseract availability
-    tesseract_ok, tesseract_msg = check_tesseract()
-
-    if not tesseract_ok:
-        st.markdown(f"""
-        <div class="glass-card">
-            {tesseract_msg}
-        </div>
-        """, unsafe_allow_html=True)
-        st.markdown("""
-        <div class="glass-card">
-            <h4 style="color: #f1f5f9;">📋 Installation Steps (Windows)</h4>
-            <ol style="color: #94a3b8;">
-                <li>Download Tesseract from <a href="https://github.com/UB-Mannheim/tesseract/wiki" target="_blank">UB-Mannheim GitHub</a></li>
-                <li>Run the installer (default path: <code>C:\\Program Files\\Tesseract-OCR</code>)</li>
-                <li>Add to PATH or set in Python: <code>pytesseract.pytesseract.tesseract_cmd = r'C:\\Program Files\\Tesseract-OCR\\tesseract.exe'</code></li>
-                <li>Restart this Streamlit app</li>
-            </ol>
-        </div>
-        """, unsafe_allow_html=True)
+    if not selected_store_id:
+        st.info("👈 Select a store from the sidebar first before scanning.")
     else:
-        st.success(tesseract_msg)
+        # Check Tesseract availability
+        tesseract_ok, tesseract_msg = check_tesseract()
 
-    st.markdown("")
+        if not tesseract_ok:
+            st.markdown(f"""
+            <div class="glass-card">
+                {tesseract_msg}
+            </div>
+            """, unsafe_allow_html=True)
+            st.markdown("""
+            <div class="glass-card">
+                <h4 style="color: #f1f5f9;">📋 Installation Steps (Windows)</h4>
+                <ol style="color: #94a3b8;">
+                    <li>Download Tesseract from <a href="https://github.com/UB-Mannheim/tesseract/wiki" target="_blank">UB-Mannheim GitHub</a></li>
+                    <li>Run the installer (default path: <code>C:\\Program Files\\Tesseract-OCR</code>)</li>
+                    <li>Add to PATH or set in Python: <code>pytesseract.pytesseract.tesseract_cmd = r'C:\\Program Files\\Tesseract-OCR\\tesseract.exe'</code></li>
+                    <li>Restart this Streamlit app</li>
+                </ol>
+            </div>
+            """, unsafe_allow_html=True)
+        else:
+            st.success(tesseract_msg)
 
-    # File uploader
-    uploaded_file = st.file_uploader(
-        "Upload receipt image",
-        type=["jpg", "jpeg", "png", "bmp", "webp"],
-        key="receipt_upload",
-        help="Take a photo of your grocery receipt and upload it here",
-    )
+        st.markdown("")
 
-    if uploaded_file is not None:
-        image = Image.open(uploaded_file)
+        # ── Image source: camera or file upload ──
+        input_method = st.radio(
+            "How do you want to capture the price label?",
+            options=["📷 Take Photo (Camera)", "📁 Upload Image File"],
+            horizontal=True,
+            key="ocr_input_method",
+            label_visibility="collapsed",
+        )
 
-        col_orig, col_proc = st.columns(2)
+        image = None
 
-        with col_orig:
-            st.markdown("**📷 Original Image**")
-            st.image(image, use_container_width=True)
-
-        # Preprocess
-        processed_image, _ = preprocess_image(image)
-        with col_proc:
-            st.markdown("**🔧 Preprocessed (for OCR)**")
-            st.image(processed_image, use_container_width=True)
-
-        st.markdown("---")
-
-        # Extract text
-        if st.button("🔍 Extract Text", key="extract_btn", use_container_width=True):
-            with st.spinner("Running OCR... This may take a moment."):
-                extracted = extract_text(image)
-                st.session_state.ocr_text = extracted
-
-        # Show extracted text
-        if st.session_state.ocr_text:
-            st.markdown("### 📝 Extracted Text")
-            st.caption("Review and edit the extracted text below. Fix any OCR errors before parsing.")
-
-            edited_text = st.text_area(
-                "Extracted Receipt Text",
-                value=st.session_state.ocr_text,
-                height=300,
-                key="ocr_text_area",
-                label_visibility="collapsed",
+        if input_method == "📷 Take Photo (Camera)":
+            camera_image = st.camera_input(
+                "Point your camera at the price label and snap",
+                key="camera_capture",
             )
+            if camera_image is not None:
+                image = Image.open(camera_image)
+        else:
+            uploaded_file = st.file_uploader(
+                "Upload price label photo",
+                type=["jpg", "jpeg", "png", "bmp", "webp"],
+                key="label_upload",
+                help="Upload a photo of a grocery shelf price tag",
+            )
+            if uploaded_file is not None:
+                image = Image.open(uploaded_file)
 
-            # Parse items
-            if st.button("📋 Parse Items", key="parse_btn", use_container_width=True):
-                items = parse_receipt_lines(edited_text)
-                st.session_state.ocr_items = items
+        # ── Process the image ──
+        if image is not None:
+            col_orig, col_proc = st.columns(2)
 
-            # Show parsed items for review and saving
-            if st.session_state.ocr_items:
-                st.markdown("### 🛍️ Parsed Items")
-                st.caption("Review parsed items. Edit descriptions and prices, then assign categories before saving.")
+            with col_orig:
+                st.markdown("**📷 Original**")
+                st.image(image, use_container_width=True)
 
-                if not selected_store_id:
-                    st.warning("⚠️ Select a store from the sidebar first!")
-                else:
-                    for i, item in enumerate(st.session_state.ocr_items):
-                        with st.container():
-                            col1, col2, col3, col4, col5 = st.columns([2.5, 1.5, 1.5, 1, 0.8])
+            # Preprocess
+            processed_image, _ = preprocess_image(image)
+            with col_proc:
+                st.markdown("**🔧 Preprocessed**")
+                st.image(processed_image, use_container_width=True)
 
-                            with col1:
-                                item_name = st.text_input(
-                                    "Item", value=item["description"],
-                                    key=f"ocr_item_{i}",
-                                    label_visibility="collapsed",
-                                    placeholder="Item name",
-                                )
+            st.markdown("---")
 
-                            with col2:
-                                item_category = st.selectbox(
-                                    "Category",
-                                    options=db.DEFAULT_CATEGORIES,
-                                    key=f"ocr_cat_{i}",
-                                    label_visibility="collapsed",
-                                )
+            # Extract text
+            if st.button("🔍 Read Price Label", key="extract_btn", use_container_width=True):
+                with st.spinner("Running OCR on price label..."):
+                    extracted = extract_text(image)
+                    st.session_state.ocr_text = extracted
 
-                            with col3:
-                                item_brand = st.text_input(
-                                    "Brand", value="",
-                                    key=f"ocr_brand_{i}",
-                                    label_visibility="collapsed",
-                                    placeholder="Brand",
-                                )
+            # Show extracted text + product entry form
+            if st.session_state.ocr_text:
+                st.markdown("### 📝 Extracted Text from Label")
+                st.caption("OCR result — use this as reference to fill in the product details below.")
 
-                            with col4:
-                                item_price = st.number_input(
-                                    "Price", value=item["price"],
-                                    min_value=0.0,
-                                    step=0.25,
-                                    format="%.2f",
-                                    key=f"ocr_price_{i}",
-                                    label_visibility="collapsed",
-                                )
+                st.code(st.session_state.ocr_text, language=None)
 
-                            with col5:
-                                save_item = st.checkbox("✅", key=f"ocr_save_{i}", value=True)
+                st.markdown("---")
+                st.markdown("### 🏷️ Enter Product Details")
+                st.caption(f"Saving to: **{selected_store_name}** • Date: **{date.today().strftime('%B %d, %Y')}**")
+
+                # ── Product form pre-filled from OCR context ──
+                with st.form("ocr_product_form", clear_on_submit=True):
+                    col1, col2 = st.columns(2)
+
+                    with col1:
+                        ocr_category = st.selectbox(
+                            "Category *",
+                            options=db.DEFAULT_CATEGORIES,
+                            key="ocr_form_category",
+                        )
+
+                    with col2:
+                        ocr_item_name = st.text_input(
+                            "Item Name *",
+                            key="ocr_form_item",
+                            placeholder="e.g. Corned Beef, Cooking Oil",
+                        )
+
+                    col3, col4 = st.columns(2)
+
+                    with col3:
+                        existing_brands = db.get_brands(selected_store_id)
+                        brand_options = ["(Type new brand)"] + existing_brands
+                        ocr_brand_select = st.selectbox(
+                            "Brand",
+                            options=brand_options,
+                            key="ocr_form_brand_select",
+                        )
+
+                    with col4:
+                        ocr_brand_custom = st.text_input(
+                            "Brand Name",
+                            key="ocr_form_brand_custom",
+                            placeholder="e.g. Argentina, Lucky Me",
+                        )
+
+                    ocr_final_brand = (
+                        ocr_brand_custom if ocr_brand_select == "(Type new brand)"
+                        else ocr_brand_select
+                    )
+
+                    col5, col6, col7 = st.columns([2, 1, 2])
+
+                    with col5:
+                        ocr_weight = st.text_input(
+                            "Weight / Volume",
+                            key="ocr_form_weight",
+                            placeholder="e.g. 250, 1.5, 500",
+                        )
+
+                    with col6:
+                        ocr_unit = st.selectbox(
+                            "Unit",
+                            options=["g", "kg", "mL", "L", "pcs", "pack", "box", "can", "bottle", "sachet", "oz", "lb"],
+                            key="ocr_form_unit",
+                        )
+
+                    with col7:
+                        ocr_price = st.number_input(
+                            "Price (₱) *",
+                            min_value=0.0,
+                            step=0.25,
+                            format="%.2f",
+                            key="ocr_form_price",
+                        )
 
                     st.markdown("")
-                    if st.button("💾 Save Selected Items", key="save_ocr_items", use_container_width=True):
-                        saved_count = 0
-                        for i, item in enumerate(st.session_state.ocr_items):
-                            if st.session_state.get(f"ocr_save_{i}", False):
-                                name = st.session_state.get(f"ocr_item_{i}", item["description"])
-                                category = st.session_state.get(f"ocr_cat_{i}", "Others")
-                                brand = st.session_state.get(f"ocr_brand_{i}", "")
-                                price = st.session_state.get(f"ocr_price_{i}", item["price"])
+                    ocr_submitted = st.form_submit_button(
+                        "💾 Save Product from Label",
+                        use_container_width=True,
+                    )
 
-                                product_id = db.add_product(
-                                    store_id=selected_store_id,
-                                    category=category,
-                                    item_name=name,
-                                    brand=brand,
-                                )
-                                db.add_price(product_id, price)
-                                saved_count += 1
-
-                        st.success(f"✅ Saved {saved_count} items to database!")
-                        st.session_state.ocr_items = []
-                        st.session_state.ocr_text = ""
-                        st.rerun()
-
-            elif st.session_state.ocr_text and not st.session_state.ocr_items:
-                st.info("💡 Click **Parse Items** to extract individual items and prices from the text.")
+                    if ocr_submitted:
+                        if not ocr_item_name.strip():
+                            st.error("❌ Item name is required.")
+                        elif ocr_price <= 0:
+                            st.error("❌ Price must be greater than 0.")
+                        else:
+                            product_id = db.add_product(
+                                store_id=selected_store_id,
+                                category=ocr_category,
+                                item_name=ocr_item_name,
+                                brand=ocr_final_brand,
+                                weight_volume=ocr_weight,
+                                unit=ocr_unit,
+                            )
+                            db.add_price(product_id, ocr_price)
+                            st.success(
+                                f"✅ Saved **{ocr_item_name}** ({ocr_final_brand}) at **₱{ocr_price:.2f}**"
+                            )
+                            st.session_state.ocr_text = ""
+                            st.rerun()
 
 
 # ═══════════════════════════════════════════════════════════════════════════════

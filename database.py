@@ -16,18 +16,7 @@ DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "grocery_trac
 
 # ─── Default seed data ────────────────────────────────────────────────────────
 
-DEFAULT_STORES = [
-    "SM Supermarket",
-    "Robinsons Supermarket",
-    "Puregold",
-    "Landers",
-    "S&R Membership Shopping",
-    "Metro Mart",
-    "Walter Mart",
-    "Shopwise",
-    "Rustans",
-    "Landmark Supermarket",
-]
+
 
 DEFAULT_CATEGORIES = [
     "Beverages",
@@ -88,12 +77,6 @@ def init_db():
                 UNIQUE(product_id, date_recorded)
             );
         """)
-
-        # Seed default stores
-        for store_name in DEFAULT_STORES:
-            conn.execute(
-                "INSERT OR IGNORE INTO stores (name) VALUES (?)", (store_name,)
-            )
 
         conn.commit()
 

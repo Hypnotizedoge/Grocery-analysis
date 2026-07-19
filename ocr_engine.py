@@ -136,51 +136,47 @@ def extract_text(image: Image.Image, psm: int = 6) -> str:
         return f"[ERROR] OCR failed: {str(e)}"
 
 
-def parse_receipt_lines(raw_text: str) -> list[dict]:
+def detect_prices_from_text(raw_text: str) -> list[float]:
     """
-    Attempt to parse receipt text into structured line items.
+    Extract all price-like numbers from OCR text.
 
     Looks for patterns like:
-        ITEM NAME            123.45
-        ITEM NAME     2 x    50.00
+        ₱123.45, P123.45, 123.45, PHP 123.45, 1,234.56
 
-    Returns a list of dicts with 'description' and 'price' keys.
+    Returns a list of detected prices sorted by value (descending),
+    filtered to reasonable grocery price range.
     """
-    lines = raw_text.strip().split("\n")
-    items = []
+    if not raw_text:
+        return []
 
-    # Pattern: text followed by a price (number with optional decimal)
-    price_pattern = re.compile(
-        r"^(.+?)\s+([\d,]+\.?\d{0,2})\s*$"
-    )
+    # Multiple patterns to catch different price label formats
+    patterns = [
+        r'[₱P]\s*([\d,]+\.?\d{0,2})',          # ₱123.45 or P123.45
+        r'PHP\s*([\d,]+\.?\d{0,2})',             # PHP 123.45
+        r'(?:^|\s)([\d,]+\.\d{2})(?:\s|$)',      # 123.45 (with decimal)
+        r'(?:price|srp|sale)\s*:?\s*([\d,]+\.?\d{0,2})',  # price: 123.45
+    ]
 
-    for line in lines:
-        line = line.strip()
-        if not line:
-            continue
-
-        match = price_pattern.match(line)
-        if match:
-            description = match.group(1).strip()
-            price_str = match.group(2).replace(",", "")
-
-            # Skip lines that look like totals, tax, etc.
-            skip_keywords = [
-                "total", "subtotal", "sub total", "tax", "vat",
-                "change", "cash", "tender", "discount", "amount due",
-                "balance", "payment",
-            ]
-            if any(kw in description.lower() for kw in skip_keywords):
-                continue
-
+    prices = set()
+    for pattern in patterns:
+        matches = re.findall(pattern, raw_text, re.IGNORECASE | re.MULTILINE)
+        for match in matches:
             try:
-                price = float(price_str)
-                if 0 < price < 100000:  # Reasonable price range
-                    items.append({
-                        "description": description,
-                        "price": price,
-                    })
+                price = float(match.replace(",", ""))
+                if 0.5 < price < 100000:  # Reasonable grocery price range
+                    prices.add(price)
             except ValueError:
                 continue
 
-    return items
+    # Also try to find standalone numbers that look like prices
+    standalone = re.findall(r'(?:^|\s)([\d]{1,6}\.?\d{0,2})(?:\s|$)', raw_text, re.MULTILINE)
+    for match in standalone:
+        try:
+            price = float(match)
+            if 1 < price < 100000:
+                prices.add(price)
+        except ValueError:
+            continue
+
+    return sorted(prices, reverse=True)
+
