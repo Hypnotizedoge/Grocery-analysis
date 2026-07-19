@@ -39,9 +39,9 @@ def _read_sheet(worksheet: str) -> pd.DataFrame:
     if worksheet == "Stores":
         return pd.DataFrame(columns=["id", "name"])
     elif worksheet == "Products":
-        return pd.DataFrame(columns=["id", "store_id", "category", "item_name", "brand", "weight_volume", "unit"])
+        return pd.DataFrame(columns=["id", "category", "item_name", "brand", "weight_volume", "unit"])
     elif worksheet == "Prices":
-        return pd.DataFrame(columns=["id", "product_id", "date", "price"])
+        return pd.DataFrame(columns=["id", "product_id", "store_id", "date", "price"])
     return pd.DataFrame()
 
 def _write_sheet(worksheet: str, df: pd.DataFrame):
@@ -78,16 +78,14 @@ def add_store(name: str) -> int:
 def get_categories() -> list[str]:
     return CATEGORIES
 
-def get_brands(store_id: int) -> list[str]:
+def get_brands() -> list[str]:
     df = _read_sheet("Products")
     if df.empty:
         return []
-    store_products = df[df["store_id"] == store_id]
-    brands = store_products["brand"].replace('', pd.NA).dropna().unique().tolist()
+    brands = df["brand"].replace('', pd.NA).dropna().unique().tolist()
     return sorted([b for b in brands if str(b).strip() != ""])
 
 def add_product(
-    store_id: int,
     category: str,
     item_name: str,
     brand: str = "",
@@ -95,10 +93,19 @@ def add_product(
     unit: str = "",
 ) -> int:
     df = _read_sheet("Products")
+    
+    # Check if a product with the exact same name/brand/weight already exists globally to avoid duplicates
+    mask = (df["item_name"].str.lower() == item_name.strip().lower()) & \
+           (df["brand"].str.lower() == brand.strip().lower()) & \
+           (df["weight_volume"].astype(str) == weight_volume.strip()) & \
+           (df["unit"] == unit.strip())
+           
+    if mask.any():
+        return int(df.loc[mask, "id"].iloc[0])
+        
     new_id = 1 if df.empty else int(df["id"].max()) + 1
     new_row = {
         "id": new_id,
-        "store_id": store_id,
         "category": category,
         "item_name": item_name.strip(),
         "brand": brand.strip(),
@@ -110,34 +117,43 @@ def add_product(
     return new_id
 
 
-def get_products(store_id: Optional[int] = None) -> list[dict]:
+def get_products(store_id: Optional[int] = None, category: str = None, brand: str = None, search: str = None) -> list[dict]:
     products_df = _read_sheet("Products")
     prices_df = _read_sheet("Prices")
     
     if products_df.empty:
         return []
         
-    if store_id is not None:
-        products_df = products_df[products_df["store_id"] == store_id]
+    if category:
+        products_df = products_df[products_df["category"] == category]
+    if brand:
+        products_df = products_df[products_df["brand"] == brand]
+    if search:
+        search = search.lower()
+        products_df = products_df[products_df["item_name"].str.lower().str.contains(search) | products_df["brand"].str.lower().str.contains(search)]
         
     products = products_df.to_dict('records')
     
-    # Attach latest price
+    # Attach latest price for the requested store (or globally if store_id is None)
     for p in products:
         p_id = p["id"]
         product_prices = prices_df[prices_df["product_id"] == p_id]
+        
+        if store_id is not None:
+            product_prices = product_prices[product_prices["store_id"] == store_id]
+            
         if not product_prices.empty:
             # Sort by date descending and get the first price
             latest = product_prices.sort_values(by="date", ascending=False).iloc[0]
             p["latest_price"] = float(latest["price"])
         else:
-            p["latest_price"] = 0.0
+            p["latest_price"] = None # Change to None to distinguish "No price logged at this store" from "0.0"
             
     # Sort products alphabetically
     products = sorted(products, key=lambda x: str(x.get("item_name", "")).lower())
     return products
 
-def get_product_by_id(product_id: int) -> Optional[dict]:
+def get_product_by_id(product_id: int, store_id: Optional[int] = None) -> Optional[dict]:
     products_df = _read_sheet("Products")
     if products_df.empty:
         return None
@@ -150,11 +166,15 @@ def get_product_by_id(product_id: int) -> Optional[dict]:
     
     prices_df = _read_sheet("Prices")
     product_prices = prices_df[prices_df["product_id"] == product_id]
+    
+    if store_id is not None:
+        product_prices = product_prices[product_prices["store_id"] == store_id]
+        
     if not product_prices.empty:
         latest = product_prices.sort_values(by="date", ascending=False).iloc[0]
         p["latest_price"] = float(latest["price"])
     else:
-        p["latest_price"] = 0.0
+        p["latest_price"] = None
         
     return p
 
@@ -172,7 +192,7 @@ def delete_product(product_id: int):
 
 # ─── Price History CRUD ───────────────────────────────────────────────────────
 
-def add_price(product_id: int, price: float, entry_date: str = None):
+def add_price(product_id: int, store_id: int, price: float, entry_date: str = None):
     if entry_date is None:
         entry_date = date.today().isoformat()
         
@@ -181,6 +201,7 @@ def add_price(product_id: int, price: float, entry_date: str = None):
     new_row = {
         "id": new_id,
         "product_id": product_id,
+        "store_id": store_id,
         "date": entry_date,
         "price": float(price)
     }
@@ -188,16 +209,16 @@ def add_price(product_id: int, price: float, entry_date: str = None):
     _write_sheet("Prices", df)
 
 
-def update_price_today(product_id: int, price: float):
+def update_price_today(product_id: int, store_id: int, price: float):
     """
-    If a price for today already exists, update it.
+    If a price for today already exists at this store, update it.
     Otherwise, insert a new record for today.
     """
     today_str = date.today().isoformat()
     df = _read_sheet("Prices")
     
     if not df.empty:
-        mask = (df["product_id"] == product_id) & (df["date"] == today_str)
+        mask = (df["product_id"] == product_id) & (df["store_id"] == store_id) & (df["date"] == today_str)
         if mask.any():
             # Update existing
             df.loc[mask, "price"] = float(price)
@@ -205,14 +226,17 @@ def update_price_today(product_id: int, price: float):
             return
             
     # If we reach here, no record for today exists. Insert new.
-    add_price(product_id, price, today_str)
+    add_price(product_id, store_id, price, today_str)
 
 
-def get_price_history(product_id: int) -> list[dict]:
+def get_price_history(product_id: int, store_id: Optional[int] = None) -> list[dict]:
     df = _read_sheet("Prices")
     if df.empty:
         return []
         
     product_prices = df[df["product_id"] == product_id]
+    if store_id is not None:
+        product_prices = product_prices[product_prices["store_id"] == store_id]
+        
     product_prices = product_prices.sort_values(by="date")
     return product_prices.to_dict('records')

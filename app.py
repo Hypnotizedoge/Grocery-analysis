@@ -499,7 +499,7 @@ with tab_entry:
 
             col3, col4 = st.columns(2)
             with col3:
-                existing_brands = db.get_brands(selected_store_id)
+                existing_brands = db.get_brands()
                 brand_option = st.selectbox("Brand", options=["(No brand / Generic)"] + existing_brands + ["New Brand"], key="entry_brand")
             with col4:
                 custom_brand = st.text_input("Brand Name", key="entry_custom_brand") if brand_option == "New Brand" else ""
@@ -539,7 +539,7 @@ with tab_entry:
                 )
                 if selected_update:
                     product_id_to_update = product_options_update[selected_update]
-                    product_info = db.get_product_by_id(product_id_to_update)
+                    product_info = db.get_product_by_id(product_id_to_update, selected_store_id)
                     default_price_from_existing = product_info["latest_price"] if product_info["latest_price"] else 0.0
 
                     st.markdown(f'''
@@ -602,19 +602,18 @@ with tab_entry:
                                     st.error("Item name is required above.")
                                 else:
                                     new_id = db.add_product(
-                                        store_id=selected_store_id,
                                         category=new_product_data["category"],
                                         item_name=new_product_data["item_name"],
                                         brand=new_product_data["brand"],
                                         weight_volume=new_product_data["weight_volume"],
                                         unit=new_product_data["unit"],
                                     )
-                                    db.add_price(new_id, detected_price)
+                                    db.add_price(new_id, selected_store_id, detected_price)
                                     st.success(f"Saved {new_product_data['item_name']} at RM {detected_price:.2f}")
                                     st.rerun()
                             else:
                                 if product_id_to_update:
-                                    db.update_price_today(product_id_to_update, detected_price)
+                                    db.update_price_today(product_id_to_update, selected_store_id, detected_price)
                                     st.success(f"Price updated to RM {detected_price:.2f} for today.")
                                     st.rerun()
 
@@ -658,14 +657,13 @@ with tab_entry:
                     st.error("Price must be greater than 0.")
                 else:
                     new_id = db.add_product(
-                        store_id=selected_store_id,
                         category=new_product_data["category"],
                         item_name=new_product_data["item_name"],
                         brand=new_product_data["brand"],
                         weight_volume=new_product_data["weight_volume"],
                         unit=new_product_data["unit"],
                     )
-                    db.add_price(new_id, final_price)
+                    db.add_price(new_id, selected_store_id, final_price)
                     st.success(f"Saved **{new_product_data['item_name']}** at **RM {final_price:.2f}**")
                     # Clear state to reset inputs
                     for key in st.session_state.keys():
@@ -677,22 +675,22 @@ with tab_entry:
                 if final_price <= 0:
                     st.error("Price must be greater than 0.")
                 elif product_id_to_update:
-                    db.update_price_today(product_id_to_update, final_price)
+                    db.update_price_today(product_id_to_update, selected_store_id, final_price)
                     st.success(f"Price updated to **RM {final_price:.2f}** for today.")
                     st.rerun()
 
             # Price History Chart inside update tab
             if product_id_to_update:
-                history = db.get_price_history(product_id_to_update)
+                history = db.get_price_history(product_id_to_update, selected_store_id)
                 if history and len(history) > 1:
                     st.markdown("---")
                     st.markdown("#### 📈 Price History")
                     hist_df = pd.DataFrame(history)
-                    hist_df["date_recorded"] = pd.to_datetime(hist_df["date_recorded"])
+                    hist_df["date"] = pd.to_datetime(hist_df["date"])
 
                     fig = go.Figure()
                     fig.add_trace(go.Scatter(
-                        x=hist_df["date_recorded"],
+                        x=hist_df["date"],
                         y=hist_df["price"],
                         mode="lines+markers",
                         line=dict(color="#22c55e", width=3, shape="spline"),
