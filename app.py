@@ -26,8 +26,10 @@ st.set_page_config(
 
 st.markdown("""
 <style>
-    /* ── Import Google Font ── */
+    /* ── Import Google Font & Material Icons ── */
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@24,400,0,0');
+    @import url('https://fonts.googleapis.com/icon?family=Material+Icons');
 
     /* ── Global ── */
     *, .stApp, [data-testid="stAppViewContainer"] {
