@@ -22,6 +22,8 @@ except ImportError:
 try:
     import pytesseract
     TESSERACT_AVAILABLE = True
+    # Explicitly set the path for Windows installations
+    pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
 except ImportError:
     TESSERACT_AVAILABLE = False
 
