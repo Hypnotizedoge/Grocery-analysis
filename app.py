@@ -489,7 +489,7 @@ with tab_entry:
             st.markdown("#### 1. Product Details")
             col1, col2 = st.columns(2)
             with col1:
-                category_option = st.selectbox("Category *", options=db.DEFAULT_CATEGORIES + ["Custom Category"], key="entry_cat")
+                category_option = st.selectbox("Category *", options=db.get_categories() + ["Custom Category"], key="entry_cat")
             with col2:
                 custom_category = st.text_input("Custom Category Name *", key="entry_custom_cat") if category_option == "Custom Category" else ""
             
