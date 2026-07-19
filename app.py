@@ -299,14 +299,14 @@ store_map = {s["name"]: s["id"] for s in stores}
 selected_store_name = None
 selected_store_id = None
 
-@st.dialog("➕ Add New Store")
+@st.dialog("Add New Store")
 def add_store_dialog():
     new_store_name = st.text_input("Store Name", key="new_store_input")
     if st.button("Add Store", key="add_store_btn", use_container_width=True):
         if new_store_name.strip():
             try:
                 db.add_store(new_store_name)
-                st.success(f"✅ Added **{new_store_name}**")
+                st.success(f"Added **{new_store_name}**")
                 st.rerun()
             except Exception as e:
                 st.error(f"Store already exists or error: {e}")
@@ -319,7 +319,7 @@ col_store, col_add = st.columns([2, 1])
 with col_store:
     if stores:
         selected_store_name = st.selectbox(
-            "🏪 Select Store",
+            "Select Store",
             options=store_names,
             key="store_selector"
         )
@@ -330,7 +330,7 @@ with col_store:
 
 with col_add:
     st.markdown("<br>", unsafe_allow_html=True) # For vertical alignment with the selectbox
-    if st.button("➕ Add New Store", use_container_width=True):
+    if st.button("Add New Store", use_container_width=True):
         add_store_dialog()
 
 st.markdown("---")
@@ -403,11 +403,11 @@ with tab_dashboard:
             with col1:
                 st.metric("Total Items", len(products))
             with col2:
-                st.metric("Avg Price", f"₱{sum(prices)/len(prices):.2f}" if prices else "—")
+                st.metric("Avg Price", f"RM {sum(prices)/len(prices):.2f}" if prices else "—")
             with col3:
-                st.metric("Highest", f"₱{max(prices):.2f}" if prices else "—")
+                st.metric("Highest", f"RM {max(prices):.2f}" if prices else "—")
             with col4:
-                st.metric("Lowest", f"₱{min(prices):.2f}" if prices else "—")
+                st.metric("Lowest", f"RM {min(prices):.2f}" if prices else "—")
 
             st.markdown("")
 
@@ -416,8 +416,8 @@ with tab_dashboard:
 
             # Format for display
             display_df = df[["category", "item_name", "brand", "weight_volume", "unit", "latest_price", "last_updated"]].copy()
-            display_df.columns = ["Category", "Item", "Brand", "Weight/Volume", "Unit", "Price (₱)", "Last Updated"]
-            display_df["Price (₱)"] = display_df["Price (₱)"].apply(lambda x: f"₱{x:.2f}" if pd.notna(x) else "—")
+            display_df.columns = ["Category", "Item", "Brand", "Weight/Volume", "Unit", "Price (RM )", "Last Updated"]
+            display_df["Price (RM )"] = display_df["Price (RM )"].apply(lambda x: f"RM {x:.2f}" if pd.notna(x) else "—")
             display_df["Last Updated"] = display_df["Last Updated"].apply(lambda x: x if x else "—")
 
             st.dataframe(
@@ -429,7 +429,7 @@ with tab_dashboard:
                     "Category": st.column_config.TextColumn("Category", width="medium"),
                     "Item": st.column_config.TextColumn("Item", width="large"),
                     "Brand": st.column_config.TextColumn("Brand", width="medium"),
-                    "Price (₱)": st.column_config.TextColumn("Price (₱)", width="small"),
+                    "Price (RM )": st.column_config.TextColumn("Price (RM )", width="small"),
                 },
             )
 
@@ -489,22 +489,22 @@ with tab_entry:
             st.markdown("#### 1. Product Details")
             col1, col2 = st.columns(2)
             with col1:
-                category_option = st.selectbox("Category *", options=db.DEFAULT_CATEGORIES + ["➕ Custom Category"], key="entry_cat")
+                category_option = st.selectbox("Category *", options=db.DEFAULT_CATEGORIES + ["Custom Category"], key="entry_cat")
             with col2:
-                custom_category = st.text_input("Custom Category Name *", key="entry_custom_cat") if category_option == "➕ Custom Category" else ""
+                custom_category = st.text_input("Custom Category Name *", key="entry_custom_cat") if category_option == "Custom Category" else ""
             
-            final_category = custom_category if category_option == "➕ Custom Category" else category_option
+            final_category = custom_category if category_option == "Custom Category" else category_option
 
             item_name = st.text_input("Item Name *", key="entry_item")
 
             col3, col4 = st.columns(2)
             with col3:
                 existing_brands = db.get_brands(selected_store_id)
-                brand_option = st.selectbox("Brand", options=["(No brand / Generic)"] + existing_brands + ["➕ New Brand"], key="entry_brand")
+                brand_option = st.selectbox("Brand", options=["(No brand / Generic)"] + existing_brands + ["New Brand"], key="entry_brand")
             with col4:
-                custom_brand = st.text_input("Brand Name", key="entry_custom_brand") if brand_option == "➕ New Brand" else ""
+                custom_brand = st.text_input("Brand Name", key="entry_custom_brand") if brand_option == "New Brand" else ""
             
-            final_brand = custom_brand if brand_option == "➕ New Brand" else ("" if brand_option == "(No brand / Generic)" else brand_option)
+            final_brand = custom_brand if brand_option == "New Brand" else ("" if brand_option == "(No brand / Generic)" else brand_option)
 
             col5, col6 = st.columns([2, 1])
             with col5:
@@ -528,7 +528,7 @@ with tab_entry:
                 st.stop()
             else:
                 product_options_update = {
-                    f"{p['item_name']} — {p['brand']} ({p['weight_volume']} {p['unit']}) | Current: ₱{p['latest_price']:.2f if p['latest_price'] else 0:.2f}".strip(): p["id"]
+                    f"{p['item_name']} — {p['brand']} ({p['weight_volume']} {p['unit']}) | Current: RM {p['latest_price']:.2f if p['latest_price'] else 0:.2f}".strip(): p["id"]
                     for p in existing_products
                 }
                 selected_update = st.selectbox(
@@ -547,7 +547,7 @@ with tab_entry:
                         <strong style="color: #38bdf8;">{product_info['item_name']}</strong>
                         <span style="color: #64748b;"> — {product_info['brand']}</span><br>
                         <span style="color: #94a3b8;">💰 Last price:
-                        <strong style="color: #22c55e;">₱{default_price_from_existing:.2f}</strong></span>
+                        <strong style="color: #22c55e;">RM {default_price_from_existing:.2f}</strong></span>
                     </div>
                     ''', unsafe_allow_html=True)
 
@@ -592,11 +592,34 @@ with tab_entry:
                         st.markdown(f'''
                         <div style="background: rgba(34,197,94,0.15); border: 2px solid rgba(34,197,94,0.4); border-radius: 20px; padding: 28px; text-align: center; margin-bottom: 12px;">
                             <div style="color: #86efac; font-size: 0.85rem; font-weight: 600; text-transform: uppercase;">💰 Detected Price</div>
-                            <div style="color: #22c55e; font-size: 3.2rem; font-weight: 800; line-height: 1;">₱{detected_price:,.2f}</div>
+                            <div style="color: #22c55e; font-size: 3.2rem; font-weight: 800; line-height: 1;">RM {detected_price:,.2f}</div>
                         </div>
                         ''', unsafe_allow_html=True)
+                        
+                        if st.button(f"Save RM {detected_price:,.2f} Now", type="primary", use_container_width=True, key="quick_save_btn"):
+                            if entry_mode == "Add New Product":
+                                if not new_product_data["item_name"].strip():
+                                    st.error("Item name is required above.")
+                                else:
+                                    new_id = db.add_product(
+                                        store_id=selected_store_id,
+                                        category=new_product_data["category"],
+                                        item_name=new_product_data["item_name"],
+                                        brand=new_product_data["brand"],
+                                        weight_volume=new_product_data["weight_volume"],
+                                        unit=new_product_data["unit"],
+                                    )
+                                    db.add_price(new_id, detected_price)
+                                    st.success(f"Saved {new_product_data['item_name']} at RM {detected_price:.2f}")
+                                    st.rerun()
+                            else:
+                                if product_id_to_update:
+                                    db.update_price_today(product_id_to_update, detected_price)
+                                    st.success(f"Price updated to RM {detected_price:.2f} for today.")
+                                    st.rerun()
+
                         if len(detected_prices) > 1:
-                            st.caption(f"Other numbers found: {', '.join([f'₱{p:,.2f}' for p in detected_prices[1:]])}")
+                            st.caption(f"Other numbers found: {', '.join([f'RM {p:,.2f}' for p in detected_prices[1:]])}")
                     else:
                         st.markdown('''
                         <div style="background: rgba(234,179,8,0.1); border: 2px solid rgba(234,179,8,0.3); border-radius: 20px; padding: 28px; text-align: center;">
@@ -618,7 +641,7 @@ with tab_entry:
             initial_price = default_price_from_existing
 
         final_price = st.number_input(
-            "Final Price (₱) *",
+            "Final Price (RM ) *",
             min_value=0.0,
             value=float(initial_price),
             step=0.25,
@@ -630,9 +653,9 @@ with tab_entry:
         if entry_mode == "🆕 Add New Product":
             if st.button("💾 Save New Product", use_container_width=True, type="primary"):
                 if not new_product_data["item_name"].strip():
-                    st.error("❌ Item name is required.")
+                    st.error("Item name is required.")
                 elif final_price <= 0:
-                    st.error("❌ Price must be greater than 0.")
+                    st.error("Price must be greater than 0.")
                 else:
                     new_id = db.add_product(
                         store_id=selected_store_id,
@@ -643,7 +666,7 @@ with tab_entry:
                         unit=new_product_data["unit"],
                     )
                     db.add_price(new_id, final_price)
-                    st.success(f"✅ Saved **{new_product_data['item_name']}** at **₱{final_price:.2f}**")
+                    st.success(f"Saved **{new_product_data['item_name']}** at **RM {final_price:.2f}**")
                     # Clear state to reset inputs
                     for key in st.session_state.keys():
                         if key.startswith("entry_"):
@@ -652,10 +675,10 @@ with tab_entry:
         else:
             if st.button("💾 Update Price", use_container_width=True, type="primary"):
                 if final_price <= 0:
-                    st.error("❌ Price must be greater than 0.")
+                    st.error("Price must be greater than 0.")
                 elif product_id_to_update:
                     db.update_price_today(product_id_to_update, final_price)
-                    st.success(f"✅ Price updated to **₱{final_price:.2f}** for today.")
+                    st.success(f"Price updated to **RM {final_price:.2f}** for today.")
                     st.rerun()
 
             # Price History Chart inside update tab
@@ -682,7 +705,7 @@ with tab_entry:
                         paper_bgcolor="rgba(0,0,0,0)",
                         plot_bgcolor="rgba(0,0,0,0)",
                         xaxis=dict(gridcolor="rgba(56, 189, 248, 0.1)", title="Date"),
-                        yaxis=dict(gridcolor="rgba(56, 189, 248, 0.1)", title="Price (₱)", tickprefix="₱"),
+                        yaxis=dict(gridcolor="rgba(56, 189, 248, 0.1)", title="Price (RM )", tickprefix="RM "),
                         margin=dict(l=0, r=0, t=20, b=0),
                         height=300,
                     )
