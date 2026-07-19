@@ -472,22 +472,22 @@ with tab_entry:
         st.markdown("#### 1. Product Details")
         col1, col2 = st.columns(2)
         with col1:
-            category_option = st.selectbox("Category *", options=db.get_categories() + ["Custom Category"], key="entry_cat")
+            category_option = st.selectbox("Select Category *", options=db.get_categories(), key="entry_cat")
         with col2:
-            custom_category = st.text_input("Custom Category Name *", key="entry_custom_cat") if category_option == "Custom Category" else ""
+            custom_category = st.text_input("Or Type Custom Category", key="entry_custom_cat", placeholder="e.g. Snacks")
         
-        final_category = custom_category if category_option == "Custom Category" else category_option
+        final_category = custom_category.strip() if custom_category.strip() else category_option
 
         item_name = st.text_input("Item Name *", key="entry_item")
 
         col3, col4 = st.columns(2)
         with col3:
             existing_brands = db.get_brands()
-            brand_option = st.selectbox("Brand", options=["(No brand / Generic)"] + existing_brands + ["New Brand"], key="entry_brand")
+            brand_option = st.selectbox("Select Existing Brand", options=["(No brand / Generic)"] + existing_brands, key="entry_brand")
         with col4:
-            custom_brand = st.text_input("Brand Name", key="entry_custom_brand") if brand_option == "New Brand" else ""
+            custom_brand = st.text_input("Or Type New Brand", key="entry_custom_brand", placeholder="e.g. Nestle")
         
-        final_brand = custom_brand if brand_option == "New Brand" else ("" if brand_option == "(No brand / Generic)" else brand_option)
+        final_brand = custom_brand.strip() if custom_brand.strip() else ("" if brand_option == "(No brand / Generic)" else brand_option)
 
         col5, col6 = st.columns([2, 1])
         with col5:

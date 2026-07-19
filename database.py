@@ -30,11 +30,13 @@ def get_conn():
 def _read_sheet(worksheet: str) -> pd.DataFrame:
     """Read a worksheet and ensure it exists and has headers."""
     try:
-        df = get_conn().read(worksheet=worksheet, ttl=0)
+        # Use ttl="10m" to cache reads for 10 minutes (prevents API rate limits).
+        # Writes will automatically clear this cache.
+        df = get_conn().read(worksheet=worksheet, ttl="10m")
         return df.fillna('')
     except Exception as e:
-        # If the worksheet doesn't exist, return an empty DF with expected columns
-        pass
+        if "WorksheetNotFound" not in str(type(e)):
+            raise e
     
     if worksheet == "Stores":
         return pd.DataFrame(columns=["id", "name"])
