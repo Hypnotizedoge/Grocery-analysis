@@ -11,7 +11,7 @@ from datetime import date, datetime
 from PIL import Image
 
 import database as db
-from ocr_engine import check_tesseract, extract_text, preprocess_image, parse_receipt_lines
+from ocr_engine import check_tesseract, extract_text, preprocess_image, detect_prices_from_text
 
 # ─── Page Config ──────────────────────────────────────────────────────────────
 
@@ -627,131 +627,161 @@ with tab_ocr:
             if uploaded_file is not None:
                 image = Image.open(uploaded_file)
 
-        # ── Process the image ──
+        # ── Process the image automatically ──
         if image is not None:
-            col_orig, col_proc = st.columns(2)
+            # Auto-run OCR immediately
+            with st.spinner("🔍 Reading price label..."):
+                processed_image, _ = preprocess_image(image)
+                extracted = extract_text(image)
+                detected_prices = detect_prices_from_text(extracted)
 
-            with col_orig:
-                st.markdown("**📷 Original**")
+            # ── Show image + instant price confirmation ──
+            col_img, col_result = st.columns([1, 1.5])
+
+            with col_img:
+                st.markdown("**📷 Captured Label**")
                 st.image(image, use_container_width=True)
 
-            # Preprocess
-            processed_image, _ = preprocess_image(image)
-            with col_proc:
-                st.markdown("**🔧 Preprocessed**")
-                st.image(processed_image, use_container_width=True)
+            with col_result:
+                # Big price confirmation banner
+                if detected_prices:
+                    primary_price = detected_prices[0]
+                    st.markdown(f"""
+                    <div style="
+                        background: linear-gradient(135deg, rgba(34, 197, 94, 0.15) 0%, rgba(16, 185, 129, 0.1) 100%);
+                        border: 2px solid rgba(34, 197, 94, 0.4);
+                        border-radius: 20px;
+                        padding: 28px;
+                        text-align: center;
+                        margin-bottom: 12px;
+                    ">
+                        <div style="color: #86efac; font-size: 0.85rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 8px;">💰 Detected Price</div>
+                        <div style="color: #22c55e; font-size: 3.2rem; font-weight: 800; line-height: 1;">₱{primary_price:,.2f}</div>
+                    </div>
+                    """, unsafe_allow_html=True)
+
+                    if len(detected_prices) > 1:
+                        other_prices = ", ".join([f"₱{p:,.2f}" for p in detected_prices[1:]])
+                        st.caption(f"Other numbers found: {other_prices}")
+                else:
+                    st.markdown("""
+                    <div style="
+                        background: rgba(234, 179, 8, 0.1);
+                        border: 2px solid rgba(234, 179, 8, 0.3);
+                        border-radius: 20px;
+                        padding: 28px;
+                        text-align: center;
+                        margin-bottom: 12px;
+                    ">
+                        <div style="color: #fbbf24; font-size: 0.85rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 8px;">⚠️ No Price Detected</div>
+                        <div style="color: #fbbf24; font-size: 1.1rem;">Enter the price manually below</div>
+                    </div>
+                    """, unsafe_allow_html=True)
+
+                # Show raw OCR text in an expander
+                with st.expander("📝 Raw OCR Text", expanded=False):
+                    st.code(extracted, language=None)
 
             st.markdown("---")
 
-            # Extract text
-            if st.button("🔍 Read Price Label", key="extract_btn", use_container_width=True):
-                with st.spinner("Running OCR on price label..."):
-                    extracted = extract_text(image)
-                    st.session_state.ocr_text = extracted
+            # ── Product entry form ──
+            st.markdown("### 🏷️ Enter Product Details")
+            st.caption(f"Saving to: **{selected_store_name}** • Date: **{date.today().strftime('%B %d, %Y')}**")
 
-            # Show extracted text + product entry form
-            if st.session_state.ocr_text:
-                st.markdown("### 📝 Extracted Text from Label")
-                st.caption("OCR result — use this as reference to fill in the product details below.")
+            # ── Product form pre-filled from OCR context ──
+            with st.form("ocr_product_form", clear_on_submit=True):
+                col1, col2 = st.columns(2)
 
-                st.code(st.session_state.ocr_text, language=None)
-
-                st.markdown("---")
-                st.markdown("### 🏷️ Enter Product Details")
-                st.caption(f"Saving to: **{selected_store_name}** • Date: **{date.today().strftime('%B %d, %Y')}**")
-
-                # ── Product form pre-filled from OCR context ──
-                with st.form("ocr_product_form", clear_on_submit=True):
-                    col1, col2 = st.columns(2)
-
-                    with col1:
-                        ocr_category = st.selectbox(
-                            "Category *",
-                            options=db.DEFAULT_CATEGORIES,
-                            key="ocr_form_category",
-                        )
-
-                    with col2:
-                        ocr_item_name = st.text_input(
-                            "Item Name *",
-                            key="ocr_form_item",
-                            placeholder="e.g. Corned Beef, Cooking Oil",
-                        )
-
-                    col3, col4 = st.columns(2)
-
-                    with col3:
-                        existing_brands = db.get_brands(selected_store_id)
-                        brand_options = ["(Type new brand)"] + existing_brands
-                        ocr_brand_select = st.selectbox(
-                            "Brand",
-                            options=brand_options,
-                            key="ocr_form_brand_select",
-                        )
-
-                    with col4:
-                        ocr_brand_custom = st.text_input(
-                            "Brand Name",
-                            key="ocr_form_brand_custom",
-                            placeholder="e.g. Argentina, Lucky Me",
-                        )
-
-                    ocr_final_brand = (
-                        ocr_brand_custom if ocr_brand_select == "(Type new brand)"
-                        else ocr_brand_select
+                with col1:
+                    ocr_category = st.selectbox(
+                        "Category *",
+                        options=db.DEFAULT_CATEGORIES,
+                        key="ocr_form_category",
                     )
 
-                    col5, col6, col7 = st.columns([2, 1, 2])
-
-                    with col5:
-                        ocr_weight = st.text_input(
-                            "Weight / Volume",
-                            key="ocr_form_weight",
-                            placeholder="e.g. 250, 1.5, 500",
-                        )
-
-                    with col6:
-                        ocr_unit = st.selectbox(
-                            "Unit",
-                            options=["g", "kg", "mL", "L", "pcs", "pack", "box", "can", "bottle", "sachet", "oz", "lb"],
-                            key="ocr_form_unit",
-                        )
-
-                    with col7:
-                        ocr_price = st.number_input(
-                            "Price (₱) *",
-                            min_value=0.0,
-                            step=0.25,
-                            format="%.2f",
-                            key="ocr_form_price",
-                        )
-
-                    st.markdown("")
-                    ocr_submitted = st.form_submit_button(
-                        "💾 Save Product from Label",
-                        use_container_width=True,
+                with col2:
+                    ocr_item_name = st.text_input(
+                        "Item Name *",
+                        key="ocr_form_item",
+                        placeholder="e.g. Corned Beef, Cooking Oil",
                     )
 
-                    if ocr_submitted:
-                        if not ocr_item_name.strip():
-                            st.error("❌ Item name is required.")
-                        elif ocr_price <= 0:
-                            st.error("❌ Price must be greater than 0.")
-                        else:
-                            product_id = db.add_product(
-                                store_id=selected_store_id,
-                                category=ocr_category,
-                                item_name=ocr_item_name,
-                                brand=ocr_final_brand,
-                                weight_volume=ocr_weight,
-                                unit=ocr_unit,
-                            )
-                            db.add_price(product_id, ocr_price)
-                            st.success(
-                                f"✅ Saved **{ocr_item_name}** ({ocr_final_brand}) at **₱{ocr_price:.2f}**"
-                            )
-                            st.session_state.ocr_text = ""
-                            st.rerun()
+                col3, col4 = st.columns(2)
+
+                with col3:
+                    existing_brands = db.get_brands(selected_store_id)
+                    brand_options = ["(Type new brand)"] + existing_brands
+                    ocr_brand_select = st.selectbox(
+                        "Brand",
+                        options=brand_options,
+                        key="ocr_form_brand_select",
+                    )
+
+                with col4:
+                    ocr_brand_custom = st.text_input(
+                        "Brand Name",
+                        key="ocr_form_brand_custom",
+                        placeholder="e.g. Argentina, Lucky Me",
+                    )
+
+                ocr_final_brand = (
+                    ocr_brand_custom if ocr_brand_select == "(Type new brand)"
+                    else ocr_brand_select
+                )
+
+                col5, col6, col7 = st.columns([2, 1, 2])
+
+                with col5:
+                    ocr_weight = st.text_input(
+                        "Weight / Volume",
+                        key="ocr_form_weight",
+                        placeholder="e.g. 250, 1.5, 500",
+                    )
+
+                with col6:
+                    ocr_unit = st.selectbox(
+                        "Unit",
+                        options=["g", "kg", "mL", "L", "pcs", "pack", "box", "can", "bottle", "sachet", "oz", "lb"],
+                        key="ocr_form_unit",
+                    )
+
+                with col7:
+                    # Pre-fill with detected price
+                    default_price = detected_prices[0] if detected_prices else 0.0
+                    ocr_price = st.number_input(
+                        "Price (₱) *",
+                        min_value=0.0,
+                        value=default_price,
+                        step=0.25,
+                        format="%.2f",
+                        key="ocr_form_price",
+                    )
+
+                st.markdown("")
+                ocr_submitted = st.form_submit_button(
+                    "💾 Save Product from Label",
+                    use_container_width=True,
+                )
+
+                if ocr_submitted:
+                    if not ocr_item_name.strip():
+                        st.error("❌ Item name is required.")
+                    elif ocr_price <= 0:
+                        st.error("❌ Price must be greater than 0.")
+                    else:
+                        product_id = db.add_product(
+                            store_id=selected_store_id,
+                            category=ocr_category,
+                            item_name=ocr_item_name,
+                            brand=ocr_final_brand,
+                            weight_volume=ocr_weight,
+                            unit=ocr_unit,
+                        )
+                        db.add_price(product_id, ocr_price)
+                        st.success(
+                            f"✅ Saved **{ocr_item_name}** ({ocr_final_brand}) at **₱{ocr_price:.2f}**"
+                        )
+                        st.rerun()
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
