@@ -356,7 +356,7 @@ with tab_dashboard:
         col_cat, col_brand, col_search = st.columns(3)
         
         with col_cat:
-            available_categories = db.get_categories(selected_store_id)
+            available_categories = db.get_categories()
             if available_categories:
                 filter_category = st.selectbox("Category", options=["All Categories"] + available_categories, key="filter_category")
             else:
@@ -364,7 +364,7 @@ with tab_dashboard:
                 
         with col_brand:
             cat_for_brand = filter_category if filter_category != "All Categories" else None
-            available_brands = db.get_brands(selected_store_id, cat_for_brand)
+            available_brands = db.get_brands()
             if available_brands:
                 filter_brand = st.selectbox("Brand", options=["All Brands"] + available_brands, key="filter_brand")
             else:
