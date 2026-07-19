@@ -128,7 +128,8 @@ def extract_text(image: Image.Image, psm: int = 6) -> str:
     _, processed_array = preprocess_image(image)
 
     # Run Tesseract
-    custom_config = f"--psm {psm} --oem 3"
+    # Restrict to numbers, decimals, commas, and currency symbols
+    custom_config = f"--psm {psm} --oem 3 -c tessedit_char_whitelist=0123456789.,₱"
     try:
         text = pytesseract.image_to_string(
             processed_array, config=custom_config
