@@ -19,7 +19,7 @@ st.set_page_config(
     page_title="Grocery Price Tracker",
     page_icon="🛒",
     layout="wide",
-    initial_sidebar_state="expanded",
+    initial_sidebar_state="collapsed",
 )
 
 # ─── Custom CSS ───────────────────────────────────────────────────────────────
@@ -31,9 +31,16 @@ st.markdown("""
     @import url('https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@24,400,0,0');
     @import url('https://fonts.googleapis.com/icon?family=Material+Icons');
 
+    
+    /* ── Hide native Streamlit UI elements ── */
+    [data-testid="collapsedControl"],
+    [data-testid="stHeader"] {
+        display: none !important;
+    }
+
     /* ── Global ── */
-    *, .stApp, [data-testid="stAppViewContainer"] {
-        font-family: 'Inter', sans-serif !important;
+    html, body, [class*="css"]  {
+        font-family: 'Inter', sans-serif;
     }
 
     .stApp {
@@ -279,102 +286,55 @@ if "ocr_text" not in st.session_state:
 if "ocr_items" not in st.session_state:
     st.session_state.ocr_items = []
 
-# ─── Sidebar ─────────────────────────────────────────────────────────────────
+# ─── Main Header & Store Selection ───────────────────────────────────────────
 
-with st.sidebar:
-    st.markdown('<div class="hero-title">🛒 Grocery Tracker</div>', unsafe_allow_html=True)
-    st.markdown('<p class="hero-subtitle">Track prices across stores</p>', unsafe_allow_html=True)
-    st.markdown("---")
+st.markdown('<div class="hero-title">🛒 Grocery Price Tracker</div>', unsafe_allow_html=True)
+st.markdown('<p class="hero-subtitle">Track prices across stores</p>', unsafe_allow_html=True)
+st.markdown("")
 
-    # ── Store selector ──
-    st.markdown("### 🏪 Select Store")
-    stores = db.get_stores()
-    store_names = [s["name"] for s in stores]
-    store_map = {s["name"]: s["id"] for s in stores}
+stores = db.get_stores()
+store_names = [s["name"] for s in stores]
+store_map = {s["name"]: s["id"] for s in stores}
 
-    selected_store_name = None
+selected_store_name = None
+selected_store_id = None
 
+@st.dialog("➕ Add New Store")
+def add_store_dialog():
+    new_store_name = st.text_input("Store Name", key="new_store_input")
+    if st.button("Add Store", key="add_store_btn", use_container_width=True):
+        if new_store_name.strip():
+            try:
+                db.add_store(new_store_name)
+                st.success(f"✅ Added **{new_store_name}**")
+                st.rerun()
+            except Exception as e:
+                st.error(f"Store already exists or error: {e}")
+        else:
+            st.warning("Enter a store name")
+
+# Show a horizontal layout for store selection
+col_store, col_add = st.columns([2, 1])
+
+with col_store:
     if stores:
         selected_store_name = st.selectbox(
-            "Grocery Store",
+            "🏪 Select Store",
             options=store_names,
-            key="store_selector",
-            label_visibility="collapsed",
+            key="store_selector"
         )
         selected_store_id = store_map[selected_store_name]
         st.session_state.selected_store_id = selected_store_id
     else:
-        selected_store_id = None
-
-    # ── Add new store ──
-    # Show prominently when no stores exist, otherwise in expander
-    def _add_store_form():
-        new_store_name = st.text_input("Store Name", key="new_store_input")
-        if st.button("Add Store", key="add_store_btn", use_container_width=True):
-            if new_store_name.strip():
-                try:
-                    db.add_store(new_store_name)
-                    st.success(f"✅ Added **{new_store_name}**")
-                    st.rerun()
-                except Exception as e:
-                    st.error(f"Store already exists or error: {e}")
-            else:
-                st.warning("Enter a store name")
-
-    if not stores:
         st.info("👋 **Welcome!** Add your first grocery store to get started.")
-        _add_store_form()
-    else:
-        with st.expander("➕ Add New Store"):
-            _add_store_form()
 
-    st.markdown("---")
+with col_add:
+    st.markdown("<br>", unsafe_allow_html=True) # For vertical alignment with the selectbox
+    if st.button("➕ Add New Store", use_container_width=True):
+        add_store_dialog()
 
-    # ── Filters ──
-    if selected_store_id:
-        st.markdown("### 🔍 Filters")
+st.markdown("---")
 
-        # Category filter
-        available_categories = db.get_categories(selected_store_id)
-        if available_categories:
-            filter_category = st.selectbox(
-                "Category",
-                options=["All Categories"] + available_categories,
-                key="filter_category",
-            )
-        else:
-            filter_category = "All Categories"
-            st.caption("No categories yet — add products first")
-
-        # Brand filter
-        cat_for_brand = filter_category if filter_category != "All Categories" else None
-        available_brands = db.get_brands(selected_store_id, cat_for_brand)
-        if available_brands:
-            filter_brand = st.selectbox(
-                "Brand",
-                options=["All Brands"] + available_brands,
-                key="filter_brand",
-            )
-        else:
-            filter_brand = "All Brands"
-            st.caption("No brands yet")
-
-        # Search
-        search_query = st.text_input("🔎 Search items", key="search_items", placeholder="Type to search...")
-
-        st.markdown("---")
-
-        # ── Stats ──
-        product_count = db.get_product_count_by_store(selected_store_id)
-        st.metric("Products Tracked", product_count)
-        st.caption(f"📅 Today: {date.today().strftime('%B %d, %Y')}")
-
-
-# ─── Main Content ────────────────────────────────────────────────────────────
-
-st.markdown('<div class="hero-title">🛒 Grocery Price Tracker</div>', unsafe_allow_html=True)
-st.markdown(f'<p class="hero-subtitle">Currently viewing: <strong>{selected_store_name if selected_store_id else "No store selected"}</strong> &nbsp;•&nbsp; {date.today().strftime("%A, %B %d, %Y")}</p>', unsafe_allow_html=True)
-st.markdown("")
 
 # ── Tabs ──
 tab_dashboard, tab_entry = st.tabs([
@@ -389,8 +349,32 @@ tab_dashboard, tab_entry = st.tabs([
 
 with tab_dashboard:
     if not selected_store_id:
-        st.info("👈 Select a store from the sidebar to get started.")
+        st.info("👈 Select a store above to get started.")
     else:
+        # ── Filters (Moved from Sidebar) ──
+        st.markdown("#### 🔍 Filters")
+        col_cat, col_brand, col_search = st.columns(3)
+        
+        with col_cat:
+            available_categories = db.get_categories(selected_store_id)
+            if available_categories:
+                filter_category = st.selectbox("Category", options=["All Categories"] + available_categories, key="filter_category")
+            else:
+                filter_category = "All Categories"
+                
+        with col_brand:
+            cat_for_brand = filter_category if filter_category != "All Categories" else None
+            available_brands = db.get_brands(selected_store_id, cat_for_brand)
+            if available_brands:
+                filter_brand = st.selectbox("Brand", options=["All Brands"] + available_brands, key="filter_brand")
+            else:
+                filter_brand = "All Brands"
+                
+        with col_search:
+            search_query = st.text_input("🔎 Search", key="search_items", placeholder="Type to search...")
+            
+        st.markdown("")
+        
         # Fetch products with filters
         cat_filter = filter_category if filter_category != "All Categories" else None
         brand_filter = filter_brand if filter_brand != "All Brands" else None
@@ -479,7 +463,7 @@ with tab_entry:
     st.caption(f"Store: **{selected_store_name if selected_store_id else 'None'}** &nbsp;•&nbsp; Date: **{date.today().strftime('%B %d, %Y')}**")
 
     if not selected_store_id:
-        st.info("👈 Select a store from the sidebar first.")
+        st.info("👈 Select a store above first.")
     else:
         # Check Tesseract availability
         tesseract_ok, tesseract_msg = check_tesseract()
