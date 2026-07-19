@@ -288,7 +288,7 @@ if "ocr_items" not in st.session_state:
 
 # ─── Main Header & Store Selection ───────────────────────────────────────────
 
-st.markdown('<div class="hero-title">🛒 Grocery Price Tracker</div>', unsafe_allow_html=True)
+st.markdown('<div class="hero-title">Grocery Price Tracker</div>', unsafe_allow_html=True)
 st.markdown('<p class="hero-subtitle">Track prices across stores</p>', unsafe_allow_html=True)
 st.markdown("")
 
@@ -326,7 +326,7 @@ with col_store:
         selected_store_id = store_map[selected_store_name]
         st.session_state.selected_store_id = selected_store_id
     else:
-        st.info("👋 **Welcome!** Add your first grocery store to get started.")
+        st.info("**Welcome!** Add your first grocery store to get started.")
 
 with col_add:
     st.markdown("<br>", unsafe_allow_html=True) # For vertical alignment with the selectbox
@@ -338,8 +338,8 @@ st.markdown("---")
 
 # ── Tabs ──
 tab_dashboard, tab_entry = st.tabs([
-    "📋 Price Dashboard",
-    "🏷️ Add / Update Product",
+    "Price Dashboard",
+    "Add / Update Product",
 ])
 
 
@@ -349,10 +349,10 @@ tab_dashboard, tab_entry = st.tabs([
 
 with tab_dashboard:
     if not selected_store_id:
-        st.info("👈 Select a store above to get started.")
+        st.info("Select a store above to get started.")
     else:
         # ── Filters (Moved from Sidebar) ──
-        st.markdown("#### 🔍 Filters")
+        st.markdown("#### Filters")
         col_cat, col_brand, col_search = st.columns(3)
         
         with col_cat:
@@ -371,7 +371,7 @@ with tab_dashboard:
                 filter_brand = "All Brands"
                 
         with col_search:
-            search_query = st.text_input("🔎 Search", key="search_items", placeholder="Type to search...")
+            search_query = st.text_input("Search", key="search_items", placeholder="Type to search...")
             
         st.markdown("")
         
@@ -436,7 +436,7 @@ with tab_dashboard:
             st.markdown("---")
 
             # ── Delete product ──
-            with st.expander("🗑️ Delete a Product"):
+            with st.expander("Delete a Product"):
                 product_options = {
                     f"{p['item_name']} — {p['brand']} ({p['weight_volume']} {p['unit']})".strip(): p["id"]
                     for p in products
@@ -446,7 +446,7 @@ with tab_dashboard:
                     options=list(product_options.keys()),
                     key="delete_product",
                 )
-                if st.button("🗑️ Delete Product", key="delete_btn", type="secondary"):
+                if st.button("Delete Product", key="delete_btn", type="secondary"):
                     if del_product_label:
                         del_id = product_options[del_product_label]
                         db.delete_product(del_id)
@@ -459,11 +459,11 @@ with tab_dashboard:
 # ═══════════════════════════════════════════════════════════════════════════════
 
 with tab_entry:
-    st.markdown("### 🏷️ Add or Update Product")
+    st.markdown("### Add or Update Product")
     st.caption(f"Store: **{selected_store_name if selected_store_id else 'None'}** &nbsp;•&nbsp; Date: **{date.today().strftime('%B %d, %Y')}**")
 
     if not selected_store_id:
-        st.info("👈 Select a store above first.")
+        st.info("Select a store above first.")
     else:
         # Check Tesseract availability
         tesseract_ok, tesseract_msg = check_tesseract()
@@ -473,7 +473,7 @@ with tab_entry:
         # ── Mode toggle ──
         entry_mode = st.radio(
             "Mode",
-            options=["🆕 Add New Product", "🔄 Update Existing Product Price"],
+            options=["Add New Product", "Update Existing Product Price"],
             horizontal=True,
             key="entry_mode",
             label_visibility="collapsed",
@@ -485,7 +485,7 @@ with tab_entry:
         new_product_data = {}
         default_price_from_existing = 0.0
 
-        if entry_mode == "🆕 Add New Product":
+        if entry_mode == "Add New Product":
             st.markdown("#### 1. Product Details")
             col1, col2 = st.columns(2)
             with col1:
@@ -558,7 +558,7 @@ with tab_entry:
         # ── Image source: camera or file upload ──
         input_method = st.radio(
             "Capture method",
-            options=["📷 Take Photo (Camera)", "📁 Upload Image File", "✏️ Skip (Manual Entry Only)"],
+            options=["Take Photo", "Upload Image File", "Manual Entry Only"],
             horizontal=True,
             key="entry_input_method",
             label_visibility="collapsed",
@@ -567,11 +567,11 @@ with tab_entry:
         image = None
         detected_price = 0.0
 
-        if input_method == "📷 Take Photo (Camera)":
+        if input_method == "Take Photo":
             camera_image = st.camera_input("Point camera at the price label", key="entry_cam")
             if camera_image is not None:
                 image = Image.open(camera_image)
-        elif input_method == "📁 Upload Image File":
+        elif input_method == "Upload Image File":
             uploaded_file = st.file_uploader("Upload price label photo", type=["jpg", "jpeg", "png", "bmp", "webp"], key="entry_upload")
             if uploaded_file is not None:
                 image = Image.open(uploaded_file)
@@ -650,8 +650,8 @@ with tab_entry:
         )
 
         st.markdown("")
-        if entry_mode == "🆕 Add New Product":
-            if st.button("💾 Save New Product", use_container_width=True, type="primary"):
+        if entry_mode == "Add New Product":
+            if st.button("Save New Product", use_container_width=True, type="primary"):
                 if not new_product_data["item_name"].strip():
                     st.error("Item name is required.")
                 elif final_price <= 0:
