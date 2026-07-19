@@ -495,7 +495,26 @@ with tab_update:
         tesseract_ok, _ = check_tesseract()
         
         st.markdown("#### 1. Select Product")
-        existing_products = db.get_products(store_id=selected_store_id)
+        
+        col_cat, col_brand = st.columns(2)
+        with col_cat:
+            available_categories = db.get_categories()
+            if available_categories:
+                filter_category = st.selectbox("Filter by Category", options=["All Categories"] + available_categories, key="up_filter_category")
+            else:
+                filter_category = "All Categories"
+                
+        with col_brand:
+            available_brands = db.get_brands()
+            if available_brands:
+                filter_brand = st.selectbox("Filter by Brand", options=["All Brands"] + available_brands, key="up_filter_brand")
+            else:
+                filter_brand = "All Brands"
+        
+        cat_filter = filter_category if filter_category != "All Categories" else None
+        brand_filter = filter_brand if filter_brand != "All Brands" else None
+        
+        existing_products = db.get_products(store_id=selected_store_id, category=cat_filter, brand=brand_filter)
         if not existing_products:
             st.info("No products yet. Use **Add New Product**.")
         else:
