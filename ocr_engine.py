@@ -19,11 +19,18 @@ try:
 except ImportError:
     CV2_AVAILABLE = False
 
+import sys
+import os
+
 try:
     import pytesseract
     TESSERACT_AVAILABLE = True
-    # Explicitly set the path for Windows installations
-    pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
+    # If running locally on Windows, set the explicit path
+    if sys.platform == "win32":
+        win_path = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
+        if os.path.exists(win_path):
+            pytesseract.pytesseract.tesseract_cmd = win_path
+    # On Cloud/Linux, pytesseract will automatically find it in the PATH
 except ImportError:
     TESSERACT_AVAILABLE = False
 
