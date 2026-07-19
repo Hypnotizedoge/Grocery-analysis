@@ -337,121 +337,10 @@ st.markdown("---")
 
 
 # ── Tabs ──
-tab_dashboard, tab_entry, tab_update = st.tabs([
-    "📋 Price Dashboard",
+tab_entry, tab_update = st.tabs([
     "🆕 Add New Product",
     "🔄 Update Price",
 ])
-
-
-# ═══════════════════════════════════════════════════════════════════════════════
-# TAB 1: PRICE DASHBOARD
-# ═══════════════════════════════════════════════════════════════════════════════
-
-with tab_dashboard:
-    if not selected_store_id:
-        st.info("👈 Select a store from the sidebar to get started.")
-    else:
-        # ── Filters ──
-        st.markdown("#### Filters")
-        col_cat, col_brand, col_search = st.columns(3)
-        
-        with col_cat:
-            available_categories = db.get_categories()
-            if available_categories:
-                filter_category = st.selectbox("Category", options=["All Categories"] + available_categories, key="filter_category")
-            else:
-                filter_category = "All Categories"
-                
-        with col_brand:
-            cat_for_brand = filter_category if filter_category != "All Categories" else None
-            available_brands = db.get_brands()
-            if available_brands:
-                filter_brand = st.selectbox("Brand", options=["All Brands"] + available_brands, key="filter_brand")
-            else:
-                filter_brand = "All Brands"
-                
-        with col_search:
-            search_query = st.text_input("Search Product", key="search_query", placeholder="e.g. Oreo, Milk...")
-
-        st.markdown("")
-
-        # Fetch products with filters
-        cat_filter = filter_category if filter_category != "All Categories" else None
-        brand_filter = filter_brand if filter_brand != "All Brands" else None
-        search_val = search_query.strip() if search_query else None
-
-        products = db.get_products(
-            store_id=selected_store_id,
-            category=cat_filter,
-            brand=brand_filter,
-            search=search_val,
-        )
-
-        if not products:
-            st.markdown('''
-            <div class="glass-card" style="text-align: center; padding: 60px 24px;">
-                <div style="font-size: 4rem; margin-bottom: 16px;">📦</div>
-                <h3 style="color: #94a3b8; margin-bottom: 8px;">No products yet</h3>
-                <p style="color: #64748b;">Add products using the <strong>Add New Product</strong> tab to get started.</p>
-            </div>
-            ''', unsafe_allow_html=True)
-        else:
-            # ── Summary metrics ──
-            col1, col2, col3, col4 = st.columns(4)
-            prices = [p["latest_price"] for p in products if p["latest_price"] is not None]
-
-            with col1:
-                st.metric("Total Items", len(products))
-            with col2:
-                st.metric("Avg Price", f"RM {sum(prices)/len(prices):.2f}" if prices else "—")
-            with col3:
-                st.metric("Highest", f"RM {max(prices):.2f}" if prices else "—")
-            with col4:
-                st.metric("Lowest", f"RM {min(prices):.2f}" if prices else "—")
-
-            st.markdown("")
-
-            # ── Products table ──
-            df = pd.DataFrame(products)
-
-            # Format for display
-            display_df = df[["category", "item_name", "brand", "weight_volume", "unit", "latest_price"]].copy()
-            display_df.columns = ["Category", "Item", "Brand", "Weight/Volume", "Unit", "Price (RM)"]
-            display_df["Price (RM)"] = display_df["Price (RM)"].apply(lambda x: f"RM {x:.2f}" if pd.notna(x) else "—")
-
-            st.dataframe(
-                display_df,
-                use_container_width=True,
-                hide_index=True,
-                height=min(400, len(display_df) * 40 + 60),
-                column_config={
-                    "Category": st.column_config.TextColumn("Category", width="medium"),
-                    "Item": st.column_config.TextColumn("Item", width="large"),
-                    "Brand": st.column_config.TextColumn("Brand", width="medium"),
-                    "Price (RM)": st.column_config.TextColumn("Price (RM)", width="small"),
-                },
-            )
-
-            st.markdown("---")
-
-            # ── Delete product ──
-            with st.expander("🗑️ Delete a Product"):
-                product_options = {
-                    f"{p['item_name']} — {p['brand']} ({p['weight_volume']} {p['unit']})".strip(): p["id"]
-                    for p in products
-                }
-                del_product_label = st.selectbox(
-                    "Select product to delete",
-                    options=list(product_options.keys()),
-                    key="delete_product",
-                )
-                if st.button("🗑️ Delete Product", key="delete_btn", type="secondary"):
-                    if del_product_label:
-                        del_id = product_options[del_product_label]
-                        db.delete_product(del_id)
-                        st.success("Product deleted.")
-                        st.rerun()
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -611,7 +500,7 @@ with tab_update:
             st.info("No products yet. Use **Add New Product**.")
         else:
             product_options_update = {
-                f"{p['item_name']} — {p['brand']} ({p['weight_volume']} {p['unit']}) | Current: RM {p['latest_price']:.2f if p['latest_price'] else 0:.2f}".strip(): p["id"]
+                f"{p['item_name']} — {p['brand']} ({p['weight_volume']} {p['unit']}) | Current: RM {float(p['latest_price']) if p['latest_price'] else 0:.2f}".strip(): p["id"]
                 for p in existing_products
             }
             selected_update = st.selectbox(
