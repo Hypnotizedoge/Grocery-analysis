@@ -97,13 +97,14 @@ def add_product(
     df = _read_sheet("Products")
     
     # Check if a product with the exact same name/brand/weight already exists globally to avoid duplicates
-    mask = (df["item_name"].str.lower() == item_name.strip().lower()) & \
-           (df["brand"].str.lower() == brand.strip().lower()) & \
-           (df["weight_volume"].astype(str) == weight_volume.strip()) & \
-           (df["unit"] == unit.strip())
-           
-    if mask.any():
-        return int(df.loc[mask, "id"].iloc[0])
+    if not df.empty:
+        mask = (df["item_name"].astype(str).str.lower() == item_name.strip().lower()) & \
+               (df["brand"].astype(str).str.lower() == brand.strip().lower()) & \
+               (df["weight_volume"].astype(str).str.lower() == weight_volume.strip().lower()) & \
+               (df["unit"].astype(str).str.lower() == unit.strip().lower())
+        existing = df[mask]
+        if not existing.empty:
+            return int(existing.iloc[0]["id"])
         
     new_id = 1 if df.empty else int(df["id"].max()) + 1
     new_row = {
