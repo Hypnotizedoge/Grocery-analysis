@@ -266,21 +266,16 @@ def get_all_prices_joined() -> list[dict]:
     
     result = []
     for _, row in df.iterrows():
-        item_str = str(row.get("item_name", ""))
-        brand_str = str(row.get("brand", ""))
-        full_item = item_str if not brand_str else f"{item_str} — {brand_str}"
-        
-        weight_str = str(row.get("weight_volume", ""))
-        unit_str = str(row.get("unit", ""))
-        full_unit = f"{weight_str} {unit_str}".strip()
-        
         result.append({
             "price_id": row.get("id_price"),
             "product_id": row.get("product_id"),
+            "Delete": False,
             "Store": str(row.get("name", "")),
             "Category": str(row.get("category", "")),
-            "Item": full_item,
-            "Unit": full_unit,
+            "Item": str(row.get("item_name", "")),
+            "Brand": str(row.get("brand", "")),
+            "Weight": str(row.get("weight_volume", "")),
+            "Unit": str(row.get("unit", "")),
             "Price": float(row.get("price", 0.0)),
             "Date": str(row.get("date", ""))
         })

@@ -592,13 +592,19 @@ with tab_entry:
 
 with tab_manage:
     st.markdown("### 🗑️ Manage Data")
-    st.caption("Edit prices directly in the sheet or select rows and press delete/backspace to remove them.")
+    st.caption("Double-click any cell to edit it. Check the '🗑️ Delete' box and save to remove a price record.")
+    st.caption("*Note: Editing Item Name, Brand, Category, Weight, or Unit updates the core product for all stores.*")
 
     joined_data = db.get_all_prices_joined()
     if not joined_data:
         st.info("No data found.")
     else:
         df = pd.DataFrame(joined_data)
+        
+        # We need store mapping if user changes Store
+        all_stores = db.get_stores()
+        store_names = [s["name"] for s in all_stores]
+        store_map = {s["name"]: s["id"] for s in all_stores}
         
         # Display data editor with inline editing and dynamic rows
         edited_df = st.data_editor(
@@ -607,19 +613,19 @@ with tab_manage:
             column_config={
                 "price_id": None, # Hide internal IDs
                 "product_id": None,
+                "Delete": st.column_config.CheckboxColumn("🗑️ Delete", default=False, help="Check this box to delete the record on save"),
+                "Store": st.column_config.SelectboxColumn("Store", options=store_names),
+                "Category": st.column_config.SelectboxColumn("Category", options=db.get_categories()),
+                "Unit": st.column_config.SelectboxColumn("Unit", options=["g", "kg", "mL", "L", "pcs", "pack", "box", "can", "bottle", "sachet", "oz", "lb"]),
                 "Price": st.column_config.NumberColumn(
                     "Price",
-                    help="Double click to edit",
                     min_value=0.0,
                     format="%.2f",
                 ),
-                "Date": st.column_config.TextColumn(
-                    "Date",
-                    help="Double click to edit"
-                )
+                "Date": st.column_config.TextColumn("Date")
             },
-            disabled=["Store", "Category", "Item", "Unit"],
-            num_rows="dynamic", # Enables deletion
+            disabled=["price_id", "product_id"],
+            num_rows="dynamic", # Enables deletion via keyboard as well
             use_container_width=True,
             key="manage_editor"
         )
@@ -634,10 +640,21 @@ with tab_manage:
             st.warning("You have unsaved changes in the sheet.")
             if st.button("💾 Save Sheet Changes", type="primary", use_container_width=True):
                 df_prices = db._read_sheet("Prices")
+                df_prods = db._read_sheet("Products")
+                any_prod_changed = False
                 
                 # Process edits
                 for row_idx, edits in changes.get("edited_rows", {}).items():
                     price_id = df.iloc[row_idx]["price_id"]
+                    product_id = df.iloc[row_idx]["product_id"]
+                    
+                    # If they checked Delete, remove it
+                    if edits.get("Delete") is True:
+                        df_prices = df_prices[df_prices["id"] != price_id]
+                        continue
+                    elif edits.get("Delete") is False:
+                        pass # They unchecked it, do nothing to delete
+                        
                     if "Price" in edits:
                         df_prices.loc[df_prices["id"] == price_id, "price"] = float(edits["Price"])
                     if "Date" in edits:
@@ -645,13 +662,37 @@ with tab_manage:
                         if hasattr(val, "isoformat"):
                             val = val.isoformat()
                         df_prices.loc[df_prices["id"] == price_id, "date"] = str(val)
+                    if "Store" in edits:
+                        new_store = edits["Store"]
+                        if new_store in store_map:
+                            df_prices.loc[df_prices["id"] == price_id, "store_id"] = store_map[new_store]
+                            
+                    # Core Product edits
+                    if "Category" in edits:
+                        df_prods.loc[df_prods["id"] == product_id, "category"] = edits["Category"]
+                        any_prod_changed = True
+                    if "Item" in edits:
+                        df_prods.loc[df_prods["id"] == product_id, "item_name"] = edits["Item"]
+                        any_prod_changed = True
+                    if "Brand" in edits:
+                        df_prods.loc[df_prods["id"] == product_id, "brand"] = edits["Brand"]
+                        any_prod_changed = True
+                    if "Weight" in edits:
+                        df_prods.loc[df_prods["id"] == product_id, "weight_volume"] = edits["Weight"]
+                        any_prod_changed = True
+                    if "Unit" in edits:
+                        df_prods.loc[df_prods["id"] == product_id, "unit"] = edits["Unit"]
+                        any_prod_changed = True
                 
-                # Process deletions
+                # Process keyboard deletions
                 for row_idx in changes.get("deleted_rows", []):
                     price_id = df.iloc[row_idx]["price_id"]
                     df_prices = df_prices[df_prices["id"] != price_id]
                     
                 db._write_sheet("Prices", df_prices)
+                if any_prod_changed:
+                    db._write_sheet("Products", df_prods)
+                    
                 st.toast("Sheet changes saved successfully!", icon="✅")
                 
                 # Reset the editor state by rerunning
