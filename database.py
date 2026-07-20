@@ -33,18 +33,27 @@ def _read_sheet(worksheet: str) -> pd.DataFrame:
         # Use ttl="10m" to cache reads for 10 minutes (prevents API rate limits).
         # Writes will automatically clear this cache.
         df = get_conn().read(worksheet=worksheet, ttl="10m")
-        return df.fillna('')
+        df = df.fillna('')
     except Exception as e:
         if "WorksheetNotFound" not in str(type(e)):
             raise e
+        df = pd.DataFrame()
     
+    # Ensure expected columns exist
     if worksheet == "Stores":
-        return pd.DataFrame(columns=["id", "name"])
+        expected_cols = ["id", "name"]
     elif worksheet == "Products":
-        return pd.DataFrame(columns=["id", "category", "item_name", "brand", "weight_volume", "unit"])
+        expected_cols = ["id", "category", "item_name", "brand", "weight_volume", "unit"]
     elif worksheet == "Prices":
-        return pd.DataFrame(columns=["id", "product_id", "store_id", "date", "price"])
-    return pd.DataFrame()
+        expected_cols = ["id", "product_id", "store_id", "date", "price"]
+    else:
+        expected_cols = []
+        
+    for col in expected_cols:
+        if col not in df.columns:
+            df[col] = pd.Series(dtype=object)
+            
+    return df
 
 def _write_sheet(worksheet: str, df: pd.DataFrame):
     """Write dataframe back to the worksheet."""
@@ -68,7 +77,7 @@ def get_stores() -> list[dict]:
 
 def add_store(name: str) -> int:
     df = _read_sheet("Stores")
-    new_id = 1 if df.empty else int(df["id"].max()) + 1
+    new_id = 1 if df.empty or pd.isna(pd.to_numeric(df["id"], errors="coerce").max()) else int(pd.to_numeric(df["id"], errors="coerce").max()) + 1
     new_row = {"id": new_id, "name": name.strip()}
     df = pd.concat([df, pd.DataFrame([new_row])], ignore_index=True)
     _write_sheet("Stores", df)
@@ -106,7 +115,7 @@ def add_product(
         if not existing.empty:
             return int(existing.iloc[0]["id"])
         
-    new_id = 1 if df.empty else int(df["id"].max()) + 1
+    new_id = 1 if df.empty or pd.isna(pd.to_numeric(df["id"], errors="coerce").max()) else int(pd.to_numeric(df["id"], errors="coerce").max()) + 1
     new_row = {
         "id": new_id,
         "category": category,
@@ -200,7 +209,7 @@ def add_price(product_id: int, store_id: int, price: float, entry_date: str = No
         entry_date = date.today().isoformat()
         
     df = _read_sheet("Prices")
-    new_id = 1 if df.empty else int(df["id"].max()) + 1
+    new_id = 1 if df.empty or pd.isna(pd.to_numeric(df["id"], errors="coerce").max()) else int(pd.to_numeric(df["id"], errors="coerce").max()) + 1
     new_row = {
         "id": new_id,
         "product_id": product_id,

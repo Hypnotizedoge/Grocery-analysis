@@ -337,9 +337,10 @@ st.markdown("---")
 
 
 # ── Tabs ──
-tab_entry, tab_update = st.tabs([
+tab_entry, tab_update, tab_manage = st.tabs([
     "🆕 Add New Product",
     "🔄 Update Price",
+    "🗑️ Manage Data",
 ])
 
 
@@ -441,7 +442,12 @@ with tab_entry:
                                     unit=unit,
                                 )
                                 db.add_price(new_id, selected_store_id, detected_price)
-                                st.success(f"Saved {item_name} at RM {detected_price:.2f}")
+                                st.toast(f"Saved {item_name} at RM {detected_price:.2f}")
+                                
+                                # Clear states
+                                for k in ["entry_item", "entry_custom_brand", "entry_weight", "add_final_price", "add_cam", "add_upload"]:
+                                    if k in st.session_state:
+                                        del st.session_state[k]
                                 st.rerun()
 
                         if len(detected_prices) > 1:
@@ -478,7 +484,12 @@ with tab_entry:
                     unit=unit,
                 )
                 db.add_price(new_id, selected_store_id, final_price)
-                st.success(f"Saved **{item_name}** at **RM {final_price:.2f}**")
+                st.toast(f"Saved **{item_name}** at **RM {final_price:.2f}**", icon="✅")
+                
+                # Clear states
+                for k in ["entry_item", "entry_custom_brand", "entry_weight", "add_final_price", "add_cam", "add_upload"]:
+                    if k in st.session_state:
+                        del st.session_state[k]
                 st.rerun()
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -590,7 +601,11 @@ with tab_update:
                                 
                                 if st.button(f"Save RM {up_detected_price:,.2f} Now", type="primary", use_container_width=True, key="up_quick_save_btn"):
                                     db.update_price_today(product_id_to_update, selected_store_id, up_detected_price)
-                                    st.success(f"Price updated to RM {up_detected_price:.2f} for today.")
+                                    st.toast(f"Price updated to RM {up_detected_price:.2f} for today.", icon="✅")
+                                    # Clear states
+                                    for k in ["up_cam", "up_upload", "up_final_price"]:
+                                        if k in st.session_state:
+                                            del st.session_state[k]
                                     st.rerun()
                                     
                             else:
@@ -615,7 +630,11 @@ with tab_update:
                         st.error("Price must be greater than 0.")
                     else:
                         db.update_price_today(product_id_to_update, selected_store_id, up_final_price)
-                        st.success(f"Price updated to **RM {up_final_price:.2f}** for today.")
+                        st.toast(f"Price updated to **RM {up_final_price:.2f}** for today.", icon="✅")
+                        # Clear states
+                        for k in ["up_cam", "up_upload", "up_final_price"]:
+                            if k in st.session_state:
+                                del st.session_state[k]
                         st.rerun()
 
                 # Price History Chart
@@ -647,3 +666,75 @@ with tab_update:
                         height=300,
                     )
                     st.plotly_chart(fig, use_container_width=True)
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# TAB 4: MANAGE DATA
+# ═══════════════════════════════════════════════════════════════════════════════
+
+with tab_manage:
+    st.markdown("### 🗑️ Manage Data")
+    st.caption("View and delete specific products or price records.")
+
+    manage_mode = st.radio("What would you like to manage?", ["Products", "Price History"], horizontal=True, label_visibility="collapsed")
+    
+    st.markdown("---")
+
+    if manage_mode == "Products":
+        st.subheader("Manage Products")
+        all_products = db.get_products()
+        if not all_products:
+            st.info("No products found.")
+        else:
+            for p in all_products:
+                with st.container():
+                    col1, col2 = st.columns([4, 1])
+                    with col1:
+                        st.markdown(f"**{p['item_name']}** — {p['brand']} ({p['weight_volume']} {p['unit']})")
+                        st.caption(f"Category: {p['category']}")
+                    with col2:
+                        if st.button("🗑️ Delete", key=f"del_prod_{p['id']}", help="Delete this product and all its price history"):
+                            db.delete_product(p['id'])
+                            st.toast(f"Deleted product {p['item_name']}", icon="🗑️")
+                            st.rerun()
+                    st.divider()
+
+    elif manage_mode == "Price History":
+        st.subheader("Manage Price History")
+        if not selected_store_id:
+            st.info("👈 Select a store from the sidebar to view its price history.")
+        else:
+            all_products = db.get_products(store_id=selected_store_id)
+            if not all_products:
+                st.info("No products found.")
+            else:
+                product_options_manage = {
+                    f"{p['item_name']} — {p['brand']}".strip(): p["id"]
+                    for p in all_products
+                }
+                selected_manage = st.selectbox(
+                    "Select Product to view history",
+                    options=list(product_options_manage.keys()),
+                    key="manage_select",
+                )
+                
+                if selected_manage:
+                    manage_product_id = product_options_manage[selected_manage]
+                    history = db.get_price_history(manage_product_id, selected_store_id)
+                    
+                    if not history:
+                        st.info("No price history for this product at this store.")
+                    else:
+                        for h in history:
+                            with st.container():
+                                col1, col2 = st.columns([4, 1])
+                                with col1:
+                                    st.markdown(f"**Date:** {h['date']} | **Price:** RM {h['price']:.2f}")
+                                with col2:
+                                    if st.button("🗑️ Delete", key=f"del_price_{h['id']}", help="Delete this specific price record"):
+                                        df_prices = db._read_sheet("Prices")
+                                        df_prices = df_prices[df_prices["id"] != h['id']]
+                                        db._write_sheet("Prices", df_prices)
+                                        st.toast(f"Deleted price record from {h['date']}", icon="🗑️")
+                                        st.rerun()
+                                st.divider()
+
