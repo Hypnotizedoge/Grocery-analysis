@@ -389,6 +389,8 @@ with tab_entry:
             def_weight = selected_product.get("weight_volume", "")
             def_unit = selected_product.get("unit", "g")
 
+        k_suffix = "new" if is_new else str(selected_product["id"])
+
         col1, col2 = st.columns(2)
         with col1:
             cats = db.get_categories()
@@ -396,13 +398,13 @@ with tab_entry:
                 cat_idx = cats.index(def_cat) if def_cat in cats else 0
             except ValueError:
                 cat_idx = 0
-            category_option = st.selectbox("Select Category *", options=cats, index=cat_idx, disabled=not is_new, key="entry_cat")
+            category_option = st.selectbox("Select Category *", options=cats, index=cat_idx, disabled=not is_new, key=f"entry_cat_{k_suffix}")
         with col2:
-            custom_category = st.text_input("Or Type Custom Category", disabled=not is_new, key="entry_custom_cat", placeholder="e.g. Snacks")
+            custom_category = st.text_input("Or Type Custom Category", disabled=not is_new, key=f"entry_custom_cat_{k_suffix}", placeholder="e.g. Snacks")
         
         final_category = def_cat if not is_new else (custom_category.strip() if custom_category.strip() else category_option)
 
-        item_name = st.text_input("Item Name *", value=def_item, disabled=not is_new, key="entry_item")
+        item_name = st.text_input("Item Name *", value=def_item, disabled=not is_new, key=f"entry_item_{k_suffix}")
 
         col3, col4 = st.columns(2)
         with col3:
@@ -412,22 +414,22 @@ with tab_entry:
                 br_idx = opts.index(def_brand) if def_brand in opts else 0
             except ValueError:
                 br_idx = 0
-            brand_option = st.selectbox("Select Existing Brand", options=opts, index=br_idx, disabled=not is_new, key="entry_brand")
+            brand_option = st.selectbox("Select Existing Brand", options=opts, index=br_idx, disabled=not is_new, key=f"entry_brand_{k_suffix}")
         with col4:
-            custom_brand = st.text_input("Or Type New Brand", disabled=not is_new, key="entry_custom_brand", placeholder="e.g. Nestle")
+            custom_brand = st.text_input("Or Type New Brand", disabled=not is_new, key=f"entry_custom_brand_{k_suffix}", placeholder="e.g. Nestle")
         
         final_brand = def_brand if not is_new else (custom_brand.strip() if custom_brand.strip() else ("" if brand_option == "(No brand / Generic)" else brand_option))
 
         col5, col6 = st.columns([2, 1])
         with col5:
-            weight_volume = st.text_input("Weight / Volume", value=def_weight, disabled=not is_new, key="entry_weight", placeholder="e.g. 250, 1.5")
+            weight_volume = st.text_input("Weight / Volume", value=def_weight, disabled=not is_new, key=f"entry_weight_{k_suffix}", placeholder="e.g. 250, 1.5")
         with col6:
             units = ["g", "kg", "mL", "L", "pcs", "pack", "box", "can", "bottle", "sachet", "oz", "lb"]
             try:
                 u_idx = units.index(def_unit) if def_unit in units else 0
             except ValueError:
                 u_idx = 0
-            unit = st.selectbox("Unit", options=units, index=u_idx, disabled=not is_new, key="entry_unit")
+            unit = st.selectbox("Unit", options=units, index=u_idx, disabled=not is_new, key=f"entry_unit_{k_suffix}")
 
         if not is_new:
             # Fetch latest price to display
@@ -503,7 +505,7 @@ with tab_entry:
                                 st.toast(f"Saved {item_name} at RM {detected_price:.2f}")
                                 
                                 # Clear states
-                                for k in ["entry_item", "entry_custom_brand", "entry_weight", "add_final_price", "add_cam", "add_upload", "entry_select_product"]:
+                                for k in [f"entry_item_{k_suffix}", f"entry_custom_brand_{k_suffix}", f"entry_weight_{k_suffix}", "add_final_price", "add_cam", "add_upload", "entry_select_product"]:
                                     if k in st.session_state:
                                         del st.session_state[k]
                                 st.rerun()
@@ -549,7 +551,7 @@ with tab_entry:
                 st.toast(f"Saved **{item_name}** at **RM {final_price:.2f}**", icon="✅")
                 
                 # Clear states
-                for k in ["entry_item", "entry_custom_brand", "entry_weight", "add_final_price", "add_cam", "add_upload", "entry_select_product"]:
+                for k in [f"entry_item_{k_suffix}", f"entry_custom_brand_{k_suffix}", f"entry_weight_{k_suffix}", "add_final_price", "add_cam", "add_upload", "entry_select_product"]:
                     if k in st.session_state:
                         del st.session_state[k]
                 st.rerun()
@@ -590,72 +592,68 @@ with tab_entry:
 
 with tab_manage:
     st.markdown("### 🗑️ Manage Data")
-    st.caption("Select a row in the sheet below to edit or delete its record.")
+    st.caption("Edit prices directly in the sheet or select rows and press delete/backspace to remove them.")
 
     joined_data = db.get_all_prices_joined()
     if not joined_data:
         st.info("No data found.")
     else:
         df = pd.DataFrame(joined_data)
-        # We add a Select column at the front
-        df.insert(0, "Select", False)
         
-        # Display data editor
+        # Display data editor with inline editing and dynamic rows
         edited_df = st.data_editor(
             df,
             hide_index=True,
             column_config={
                 "price_id": None, # Hide internal IDs
                 "product_id": None,
-                "Select": st.column_config.CheckboxColumn(
-                    "Select",
-                    help="Select a row to edit or delete",
-                    default=False,
+                "Price": st.column_config.NumberColumn(
+                    "Price",
+                    help="Double click to edit",
+                    min_value=0.0,
+                    format="%.2f",
+                ),
+                "Date": st.column_config.TextColumn(
+                    "Date",
+                    help="Double click to edit"
                 )
             },
-            disabled=["price_id", "product_id", "Store", "Category", "Item", "Unit", "Price", "Date"],
+            disabled=["Store", "Category", "Item", "Unit"],
+            num_rows="dynamic", # Enables deletion
             use_container_width=True,
             key="manage_editor"
         )
         
-        selected_rows = edited_df[edited_df["Select"] == True]
+        # Check for un-saved changes in session state
+        changes = st.session_state.get("manage_editor", {})
+        has_edits = bool(changes.get("edited_rows"))
+        has_deletions = bool(changes.get("deleted_rows"))
         
-        if len(selected_rows) > 0:
+        if has_edits or has_deletions:
             st.markdown("---")
-            st.markdown("#### Actions for Selected Data")
-            for _, row in selected_rows.iterrows():
-                price_id = row["price_id"]
-                product_id = row["product_id"]
+            st.warning("You have unsaved changes in the sheet.")
+            if st.button("💾 Save Sheet Changes", type="primary", use_container_width=True):
+                df_prices = db._read_sheet("Prices")
                 
-                with st.container():
-                    st.markdown(f"**{row['Store']}** — {row['Item']} ({row['Unit']})")
-                    st.caption(f"Category: {row['Category']} | Date: {row['Date']}")
+                # Process edits
+                for row_idx, edits in changes.get("edited_rows", {}).items():
+                    price_id = df.iloc[row_idx]["price_id"]
+                    if "Price" in edits:
+                        df_prices.loc[df_prices["id"] == price_id, "price"] = float(edits["Price"])
+                    if "Date" in edits:
+                        val = edits["Date"]
+                        if hasattr(val, "isoformat"):
+                            val = val.isoformat()
+                        df_prices.loc[df_prices["id"] == price_id, "date"] = str(val)
+                
+                # Process deletions
+                for row_idx in changes.get("deleted_rows", []):
+                    price_id = df.iloc[row_idx]["price_id"]
+                    df_prices = df_prices[df_prices["id"] != price_id]
                     
-                    col1, col2, col3 = st.columns([2, 1, 1])
-                    with col1:
-                        new_price = st.number_input("New Price", value=float(row["Price"]), step=0.25, format="%.2f", key=f"edit_price_{price_id}")
-                    with col2:
-                        st.markdown("<br>", unsafe_allow_html=True)
-                        if st.button("✏️ Save Price", key=f"save_edit_{price_id}", use_container_width=True):
-                            df_prices = db._read_sheet("Prices")
-                            df_prices.loc[df_prices["id"] == price_id, "price"] = float(new_price)
-                            db._write_sheet("Prices", df_prices)
-                            st.toast("Price updated!", icon="✅")
-                            st.rerun()
-                    with col3:
-                        st.markdown("<br>", unsafe_allow_html=True)
-                        if st.button("🗑️ Delete Price", key=f"del_price_btn_{price_id}", use_container_width=True):
-                            df_prices = db._read_sheet("Prices")
-                            df_prices = df_prices[df_prices["id"] != price_id]
-                            db._write_sheet("Prices", df_prices)
-                            st.toast("Deleted price record!", icon="🗑️")
-                            st.rerun()
-                            
-                    with st.expander("Delete Entire Product"):
-                        st.warning("This will delete the product and ALL of its historical prices from all stores.")
-                        if st.button("🗑️ Confirm Delete Product", key=f"del_prod_btn_{price_id}", type="primary"):
-                            db.delete_product(product_id)
-                            st.toast("Deleted entire product!", icon="🗑️")
-                            st.rerun()
-                    st.divider()
+                db._write_sheet("Prices", df_prices)
+                st.toast("Sheet changes saved successfully!", icon="✅")
+                
+                # Reset the editor state by rerunning
+                st.rerun()
 
