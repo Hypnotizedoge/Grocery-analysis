@@ -337,19 +337,18 @@ st.markdown("---")
 
 
 # ── Tabs ──
-tab_entry, tab_update, tab_manage = st.tabs([
-    "🆕 Add New Product",
-    "🔄 Update Price",
+tab_entry, tab_manage = st.tabs([
+    "📝 Add / Update Product",
     "🗑️ Manage Data",
 ])
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# TAB 2: ADD NEW PRODUCT
+# TAB 2: ADD / UPDATE PRODUCT
 # ═══════════════════════════════════════════════════════════════════════════════
 
 with tab_entry:
-    st.markdown("### 🆕 Add New Product")
+    st.markdown("### 📝 Add / Update Product")
     st.caption(f"Store: **{selected_store_name if selected_store_id else 'None'}** &nbsp;•&nbsp; Date: **{date.today().strftime('%B %d, %Y')}**")
 
     if not selected_store_id:
@@ -359,34 +358,92 @@ with tab_entry:
         if not tesseract_ok:
             st.warning("OCR (Tesseract) is not configured correctly. You can still enter prices manually.")
 
-        st.markdown("#### 1. Product Details")
+        st.markdown("#### 1. Select or Create Product")
+        
+        all_products = db.get_products()
+        product_options = {"✨ + Create New Product": None}
+        for p in all_products:
+            label = f"{p['item_name']} — {p['brand']} ({p['weight_volume']} {p['unit']})"
+            product_options[label] = p
+            
+        selected_label = st.selectbox(
+            "Search and select a product...",
+            options=list(product_options.keys()),
+            key="entry_select_product"
+        )
+        
+        selected_product = product_options[selected_label]
+        is_new = selected_product is None
+        
+        if is_new:
+            def_cat = ""
+            def_item = ""
+            def_brand = "(No brand / Generic)"
+            def_weight = ""
+            def_unit = "g"
+        else:
+            def_cat = selected_product.get("category", "")
+            def_item = selected_product.get("item_name", "")
+            def_brand = selected_product.get("brand", "(No brand / Generic)")
+            if not def_brand: def_brand = "(No brand / Generic)"
+            def_weight = selected_product.get("weight_volume", "")
+            def_unit = selected_product.get("unit", "g")
+
         col1, col2 = st.columns(2)
         with col1:
-            category_option = st.selectbox("Select Category *", options=db.get_categories(), key="entry_cat")
+            cats = db.get_categories()
+            try:
+                cat_idx = cats.index(def_cat) if def_cat in cats else 0
+            except ValueError:
+                cat_idx = 0
+            category_option = st.selectbox("Select Category *", options=cats, index=cat_idx, disabled=not is_new, key="entry_cat")
         with col2:
-            custom_category = st.text_input("Or Type Custom Category", key="entry_custom_cat", placeholder="e.g. Snacks")
+            custom_category = st.text_input("Or Type Custom Category", disabled=not is_new, key="entry_custom_cat", placeholder="e.g. Snacks")
         
-        final_category = custom_category.strip() if custom_category.strip() else category_option
+        final_category = def_cat if not is_new else (custom_category.strip() if custom_category.strip() else category_option)
 
-        item_name = st.text_input("Item Name *", key="entry_item")
+        item_name = st.text_input("Item Name *", value=def_item, disabled=not is_new, key="entry_item")
 
         col3, col4 = st.columns(2)
         with col3:
             existing_brands = db.get_brands()
-            brand_option = st.selectbox("Select Existing Brand", options=["(No brand / Generic)"] + existing_brands, key="entry_brand")
+            opts = ["(No brand / Generic)"] + existing_brands
+            try:
+                br_idx = opts.index(def_brand) if def_brand in opts else 0
+            except ValueError:
+                br_idx = 0
+            brand_option = st.selectbox("Select Existing Brand", options=opts, index=br_idx, disabled=not is_new, key="entry_brand")
         with col4:
-            custom_brand = st.text_input("Or Type New Brand", key="entry_custom_brand", placeholder="e.g. Nestle")
+            custom_brand = st.text_input("Or Type New Brand", disabled=not is_new, key="entry_custom_brand", placeholder="e.g. Nestle")
         
-        final_brand = custom_brand.strip() if custom_brand.strip() else ("" if brand_option == "(No brand / Generic)" else brand_option)
+        final_brand = def_brand if not is_new else (custom_brand.strip() if custom_brand.strip() else ("" if brand_option == "(No brand / Generic)" else brand_option))
 
         col5, col6 = st.columns([2, 1])
         with col5:
-            weight_volume = st.text_input("Weight / Volume", key="entry_weight", placeholder="e.g. 250, 1.5")
+            weight_volume = st.text_input("Weight / Volume", value=def_weight, disabled=not is_new, key="entry_weight", placeholder="e.g. 250, 1.5")
         with col6:
-            unit = st.selectbox("Unit", options=["g", "kg", "mL", "L", "pcs", "pack", "box", "can", "bottle", "sachet", "oz", "lb"], key="entry_unit")
+            units = ["g", "kg", "mL", "L", "pcs", "pack", "box", "can", "bottle", "sachet", "oz", "lb"]
+            try:
+                u_idx = units.index(def_unit) if def_unit in units else 0
+            except ValueError:
+                u_idx = 0
+            unit = st.selectbox("Unit", options=units, index=u_idx, disabled=not is_new, key="entry_unit")
+
+        if not is_new:
+            # Fetch latest price to display
+            product_info = db.get_product_by_id(selected_product["id"], selected_store_id)
+            default_price_from_existing = product_info["latest_price"] if product_info["latest_price"] else 0.0
+            st.markdown(f'''
+            <div class="glass-card" style="margin-top: 12px; padding: 16px;">
+                <span style="color: #94a3b8;">💰 Last price at this store:
+                <strong style="color: #22c55e;">RM {default_price_from_existing:.2f}</strong></span>
+            </div>
+            ''', unsafe_allow_html=True)
+        else:
+            default_price_from_existing = 0.0
 
         st.markdown("---")
-        st.markdown("#### 2. Capture Initial Price")
+        st.markdown("#### 2. Capture Price")
         
         input_method = st.radio(
             "Capture method",
@@ -402,12 +459,10 @@ with tab_entry:
         if input_method == "Take Photo":
             camera_image = st.camera_input("Point camera at the price label", key="add_cam")
             if camera_image is not None:
-                from PIL import Image
                 image = Image.open(camera_image)
         elif input_method == "Upload Image File":
             uploaded_file = st.file_uploader("Upload price label photo", type=["jpg", "jpeg", "png", "bmp", "webp"], key="add_upload")
             if uploaded_file is not None:
-                from PIL import Image
                 image = Image.open(uploaded_file)
 
         if image is not None:
@@ -430,26 +485,29 @@ with tab_entry:
                         </div>
                         ''', unsafe_allow_html=True)
                         
-                        if st.button(f"Save New Product at RM {detected_price:,.2f} Now", type="primary", use_container_width=True, key="add_quick_save_btn"):
+                        if st.button(f"Save RM {detected_price:,.2f} Now", type="primary", use_container_width=True, key="add_quick_save_btn"):
                             if not item_name.strip():
                                 st.error("Item name is required above.")
                             else:
-                                new_id = db.add_product(
-                                    category=final_category,
-                                    item_name=item_name,
-                                    brand=final_brand,
-                                    weight_volume=weight_volume,
-                                    unit=unit,
-                                )
-                                db.add_price(new_id, selected_store_id, detected_price)
+                                if is_new:
+                                    p_id = db.add_product(
+                                        category=final_category,
+                                        item_name=item_name,
+                                        brand=final_brand,
+                                        weight_volume=weight_volume,
+                                        unit=unit,
+                                    )
+                                else:
+                                    p_id = selected_product["id"]
+                                db.update_price_today(p_id, selected_store_id, detected_price)
                                 st.toast(f"Saved {item_name} at RM {detected_price:.2f}")
                                 
                                 # Clear states
-                                for k in ["entry_item", "entry_custom_brand", "entry_weight", "add_final_price", "add_cam", "add_upload"]:
+                                for k in ["entry_item", "entry_custom_brand", "entry_weight", "add_final_price", "add_cam", "add_upload", "entry_select_product"]:
                                     if k in st.session_state:
                                         del st.session_state[k]
                                 st.rerun()
-
+                                
                         if len(detected_prices) > 1:
                             st.caption(f"Other numbers found: {', '.join([f'RM {p:,.2f}' for p in detected_prices[1:]])}")
                     else:
@@ -458,214 +516,73 @@ with tab_entry:
                 st.image(image, use_container_width=True, caption="Image captured (OCR disabled)")
 
         st.markdown("---")
-        st.markdown("#### 3. Save Product")
+        st.markdown("#### 3. Save Price")
         
         final_price = st.number_input(
             "Final Price (RM ) *",
             min_value=0.0,
-            value=float(detected_price) if detected_price > 0 else 0.0,
+            value=float(detected_price) if detected_price > 0 else float(default_price_from_existing),
             step=0.25,
             format="%.2f",
             key="add_final_price",
         )
 
         st.markdown("")
-        if st.button("Save New Product", use_container_width=True, type="primary"):
+        if st.button("💾 Save Product & Price", use_container_width=True, type="primary"):
             if not item_name.strip():
                 st.error("Item name is required.")
             elif final_price <= 0:
                 st.error("Price must be greater than 0.")
             else:
-                new_id = db.add_product(
-                    category=final_category,
-                    item_name=item_name,
-                    brand=final_brand,
-                    weight_volume=weight_volume,
-                    unit=unit,
-                )
-                db.add_price(new_id, selected_store_id, final_price)
+                if is_new:
+                    p_id = db.add_product(
+                        category=final_category,
+                        item_name=item_name,
+                        brand=final_brand,
+                        weight_volume=weight_volume,
+                        unit=unit,
+                    )
+                else:
+                    p_id = selected_product["id"]
+                    
+                db.update_price_today(p_id, selected_store_id, final_price)
                 st.toast(f"Saved **{item_name}** at **RM {final_price:.2f}**", icon="✅")
                 
                 # Clear states
-                for k in ["entry_item", "entry_custom_brand", "entry_weight", "add_final_price", "add_cam", "add_upload"]:
+                for k in ["entry_item", "entry_custom_brand", "entry_weight", "add_final_price", "add_cam", "add_upload", "entry_select_product"]:
                     if k in st.session_state:
                         del st.session_state[k]
                 st.rerun()
 
-# ═══════════════════════════════════════════════════════════════════════════════
-# TAB 3: UPDATE PRICE
-# ═══════════════════════════════════════════════════════════════════════════════
-
-with tab_update:
-    st.markdown("### 🔄 Update Price")
-    st.caption(f"Store: **{selected_store_name if selected_store_id else 'None'}** &nbsp;•&nbsp; Date: **{date.today().strftime('%B %d, %Y')}**")
-
-    if not selected_store_id:
-        st.info("👈 Select a store from the sidebar first.")
-    else:
-        tesseract_ok, _ = check_tesseract()
-        
-        st.markdown("#### 1. Select Product")
-        
-        col_cat, col_brand = st.columns(2)
-        with col_cat:
-            available_categories = db.get_categories()
-            if available_categories:
-                filter_category = st.selectbox("Filter by Category", options=["All Categories"] + available_categories, key="up_filter_category")
-            else:
-                filter_category = "All Categories"
-                
-        with col_brand:
-            available_brands = db.get_brands()
-            if available_brands:
-                filter_brand = st.selectbox("Filter by Brand", options=["All Brands"] + available_brands, key="up_filter_brand")
-            else:
-                filter_brand = "All Brands"
-        
-        cat_filter = filter_category if filter_category != "All Categories" else None
-        brand_filter = filter_brand if filter_brand != "All Brands" else None
-        
-        existing_products = db.get_products(store_id=selected_store_id, category=cat_filter, brand=brand_filter)
-        if not existing_products:
-            st.info("No products yet. Use **Add New Product**.")
-        else:
-            product_options_update = {
-                f"{p['item_name']} — {p['brand']} ({p['weight_volume']} {p['unit']}) | Current: RM {float(p['latest_price']) if p['latest_price'] else 0:.2f}".strip(): p["id"]
-                for p in existing_products
-            }
-            selected_update = st.selectbox(
-                "Product",
-                options=list(product_options_update.keys()),
-                key="update_select",
-                placeholder="Search and select a product...",
-            )
-            
-            if selected_update:
-                product_id_to_update = product_options_update[selected_update]
-                product_info = db.get_product_by_id(product_id_to_update, selected_store_id)
-                default_price_from_existing = product_info["latest_price"] if product_info["latest_price"] else 0.0
-
-                st.markdown(f'''
-                <div class="glass-card">
-                    <strong style="color: #38bdf8;">{product_info['item_name']}</strong>
-                    <span style="color: #64748b;"> — {product_info['brand']}</span><br>
-                    <span style="color: #94a3b8;">💰 Last price at this store:
-                    <strong style="color: #22c55e;">RM {default_price_from_existing:.2f}</strong></span>
-                </div>
-                ''', unsafe_allow_html=True)
-
+        if not is_new:
+            # Price History Chart
+            history = db.get_price_history(selected_product["id"], selected_store_id)
+            if history and len(history) > 1:
                 st.markdown("---")
-                st.markdown("#### 2. Capture New Price")
-                
-                up_input_method = st.radio(
-                    "Capture method",
-                    options=["Take Photo", "Upload Image File", "Manual Entry Only"],
-                    horizontal=True,
-                    key="up_input_method",
-                    label_visibility="collapsed",
+                st.markdown("#### 📈 Price History at this Store")
+                hist_df = pd.DataFrame(history)
+                hist_df["date"] = pd.to_datetime(hist_df["date"])
+
+                fig = go.Figure()
+                fig.add_trace(go.Scatter(
+                    x=hist_df["date"],
+                    y=hist_df["price"],
+                    mode="lines+markers",
+                    line=dict(color="#22c55e", width=3, shape="spline"),
+                    marker=dict(size=8, color="#6366f1", line=dict(width=2, color="#22c55e")),
+                    fill="tozeroy",
+                    fillcolor="rgba(34, 197, 94, 0.08)",
+                ))
+                fig.update_layout(
+                    template="plotly_dark",
+                    paper_bgcolor="rgba(0,0,0,0)",
+                    plot_bgcolor="rgba(0,0,0,0)",
+                    xaxis=dict(gridcolor="rgba(56, 189, 248, 0.1)", title="Date"),
+                    yaxis=dict(gridcolor="rgba(56, 189, 248, 0.1)", title="Price (RM )", tickprefix="RM "),
+                    margin=dict(l=0, r=0, t=20, b=0),
+                    height=300,
                 )
-
-                up_image = None
-                up_detected_price = 0.0
-
-                if up_input_method == "Take Photo":
-                    up_camera_image = st.camera_input("Point camera at the price label", key="up_cam")
-                    if up_camera_image is not None:
-                        from PIL import Image
-                        up_image = Image.open(up_camera_image)
-                elif up_input_method == "Upload Image File":
-                    up_uploaded_file = st.file_uploader("Upload price label photo", type=["jpg", "jpeg", "png", "bmp", "webp"], key="up_upload")
-                    if up_uploaded_file is not None:
-                        from PIL import Image
-                        up_image = Image.open(up_uploaded_file)
-
-                if up_image is not None:
-                    if tesseract_ok:
-                        with st.spinner("🔍 Reading price label..."):
-                            _, _ = preprocess_image(up_image)
-                            up_extracted = extract_text(up_image)
-                            up_detected_prices = detect_prices_from_text(up_extracted)
-                        
-                        col_img, col_result = st.columns([1, 1.5])
-                        with col_img:
-                            st.image(up_image, use_container_width=True)
-                        with col_result:
-                            if up_detected_prices:
-                                up_detected_price = up_detected_prices[0]
-                                st.markdown(f'''
-                                <div style="background: rgba(34,197,94,0.15); border: 2px solid rgba(34,197,94,0.4); border-radius: 20px; padding: 28px; text-align: center; margin-bottom: 12px;">
-                                    <div style="color: #86efac; font-size: 0.85rem; font-weight: 600; text-transform: uppercase;">💰 Detected Price</div>
-                                    <div style="color: #22c55e; font-size: 3.2rem; font-weight: 800; line-height: 1;">RM {up_detected_price:,.2f}</div>
-                                </div>
-                                ''', unsafe_allow_html=True)
-                                
-                                if st.button(f"Save RM {up_detected_price:,.2f} Now", type="primary", use_container_width=True, key="up_quick_save_btn"):
-                                    db.update_price_today(product_id_to_update, selected_store_id, up_detected_price)
-                                    st.toast(f"Price updated to RM {up_detected_price:.2f} for today.", icon="✅")
-                                    # Clear states
-                                    for k in ["up_cam", "up_upload", "up_final_price"]:
-                                        if k in st.session_state:
-                                            del st.session_state[k]
-                                    st.rerun()
-                                    
-                            else:
-                                st.info("⚠️ No Price Detected. Enter manually below.")
-                    else:
-                        st.image(up_image, use_container_width=True, caption="Image captured")
-
-                st.markdown("---")
-                st.markdown("#### 3. Save Price")
-                
-                up_final_price = st.number_input(
-                    "Final Price (RM ) *",
-                    min_value=0.0,
-                    value=float(up_detected_price) if up_detected_price > 0 else float(default_price_from_existing),
-                    step=0.25,
-                    format="%.2f",
-                    key="up_final_price",
-                )
-
-                if st.button("💾 Update Price", use_container_width=True, type="primary"):
-                    if up_final_price <= 0:
-                        st.error("Price must be greater than 0.")
-                    else:
-                        db.update_price_today(product_id_to_update, selected_store_id, up_final_price)
-                        st.toast(f"Price updated to **RM {up_final_price:.2f}** for today.", icon="✅")
-                        # Clear states
-                        for k in ["up_cam", "up_upload", "up_final_price"]:
-                            if k in st.session_state:
-                                del st.session_state[k]
-                        st.rerun()
-
-                # Price History Chart
-                history = db.get_price_history(product_id_to_update, selected_store_id)
-                if history and len(history) > 1:
-                    st.markdown("---")
-                    st.markdown("#### 📈 Price History at this Store")
-                    import plotly.graph_objects as go
-                    hist_df = pd.DataFrame(history)
-                    hist_df["date"] = pd.to_datetime(hist_df["date"])
-
-                    fig = go.Figure()
-                    fig.add_trace(go.Scatter(
-                        x=hist_df["date"],
-                        y=hist_df["price"],
-                        mode="lines+markers",
-                        line=dict(color="#22c55e", width=3, shape="spline"),
-                        marker=dict(size=8, color="#6366f1", line=dict(width=2, color="#22c55e")),
-                        fill="tozeroy",
-                        fillcolor="rgba(34, 197, 94, 0.08)",
-                    ))
-                    fig.update_layout(
-                        template="plotly_dark",
-                        paper_bgcolor="rgba(0,0,0,0)",
-                        plot_bgcolor="rgba(0,0,0,0)",
-                        xaxis=dict(gridcolor="rgba(56, 189, 248, 0.1)", title="Date"),
-                        yaxis=dict(gridcolor="rgba(56, 189, 248, 0.1)", title="Price (RM )", tickprefix="RM "),
-                        margin=dict(l=0, r=0, t=20, b=0),
-                        height=300,
-                    )
-                    st.plotly_chart(fig, use_container_width=True)
+                st.plotly_chart(fig, use_container_width=True)
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # TAB 4: MANAGE DATA
@@ -673,68 +590,72 @@ with tab_update:
 
 with tab_manage:
     st.markdown("### 🗑️ Manage Data")
-    st.caption("View and delete specific products or price records.")
+    st.caption("Select a row in the sheet below to edit or delete its record.")
 
-    manage_mode = st.radio("What would you like to manage?", ["Products", "Price History"], horizontal=True, label_visibility="collapsed")
-    
-    st.markdown("---")
-
-    if manage_mode == "Products":
-        st.subheader("Manage Products")
-        all_products = db.get_products()
-        if not all_products:
-            st.info("No products found.")
-        else:
-            for p in all_products:
+    joined_data = db.get_all_prices_joined()
+    if not joined_data:
+        st.info("No data found.")
+    else:
+        df = pd.DataFrame(joined_data)
+        # We add a Select column at the front
+        df.insert(0, "Select", False)
+        
+        # Display data editor
+        edited_df = st.data_editor(
+            df,
+            hide_index=True,
+            column_config={
+                "price_id": None, # Hide internal IDs
+                "product_id": None,
+                "Select": st.column_config.CheckboxColumn(
+                    "Select",
+                    help="Select a row to edit or delete",
+                    default=False,
+                )
+            },
+            disabled=["price_id", "product_id", "Store", "Category", "Item", "Unit", "Price", "Date"],
+            use_container_width=True,
+            key="manage_editor"
+        )
+        
+        selected_rows = edited_df[edited_df["Select"] == True]
+        
+        if len(selected_rows) > 0:
+            st.markdown("---")
+            st.markdown("#### Actions for Selected Data")
+            for _, row in selected_rows.iterrows():
+                price_id = row["price_id"]
+                product_id = row["product_id"]
+                
                 with st.container():
-                    col1, col2 = st.columns([4, 1])
+                    st.markdown(f"**{row['Store']}** — {row['Item']} ({row['Unit']})")
+                    st.caption(f"Category: {row['Category']} | Date: {row['Date']}")
+                    
+                    col1, col2, col3 = st.columns([2, 1, 1])
                     with col1:
-                        st.markdown(f"**{p['item_name']}** — {p['brand']} ({p['weight_volume']} {p['unit']})")
-                        st.caption(f"Category: {p['category']}")
+                        new_price = st.number_input("New Price", value=float(row["Price"]), step=0.25, format="%.2f", key=f"edit_price_{price_id}")
                     with col2:
-                        if st.button("🗑️ Delete", key=f"del_prod_{p['id']}", help="Delete this product and all its price history"):
-                            db.delete_product(p['id'])
-                            st.toast(f"Deleted product {p['item_name']}", icon="🗑️")
+                        st.markdown("<br>", unsafe_allow_html=True)
+                        if st.button("✏️ Save Price", key=f"save_edit_{price_id}", use_container_width=True):
+                            df_prices = db._read_sheet("Prices")
+                            df_prices.loc[df_prices["id"] == price_id, "price"] = float(new_price)
+                            db._write_sheet("Prices", df_prices)
+                            st.toast("Price updated!", icon="✅")
+                            st.rerun()
+                    with col3:
+                        st.markdown("<br>", unsafe_allow_html=True)
+                        if st.button("🗑️ Delete Price", key=f"del_price_btn_{price_id}", use_container_width=True):
+                            df_prices = db._read_sheet("Prices")
+                            df_prices = df_prices[df_prices["id"] != price_id]
+                            db._write_sheet("Prices", df_prices)
+                            st.toast("Deleted price record!", icon="🗑️")
+                            st.rerun()
+                            
+                    with st.expander("Delete Entire Product"):
+                        st.warning("This will delete the product and ALL of its historical prices from all stores.")
+                        if st.button("🗑️ Confirm Delete Product", key=f"del_prod_btn_{price_id}", type="primary"):
+                            db.delete_product(product_id)
+                            st.toast("Deleted entire product!", icon="🗑️")
                             st.rerun()
                     st.divider()
-
-    elif manage_mode == "Price History":
-        st.subheader("Manage Price History")
-        if not selected_store_id:
-            st.info("👈 Select a store from the sidebar to view its price history.")
-        else:
-            all_products = db.get_products(store_id=selected_store_id)
-            if not all_products:
-                st.info("No products found.")
-            else:
-                product_options_manage = {
-                    f"{p['item_name']} — {p['brand']}".strip(): p["id"]
-                    for p in all_products
-                }
-                selected_manage = st.selectbox(
-                    "Select Product to view history",
-                    options=list(product_options_manage.keys()),
-                    key="manage_select",
-                )
-                
-                if selected_manage:
-                    manage_product_id = product_options_manage[selected_manage]
-                    history = db.get_price_history(manage_product_id, selected_store_id)
-                    
-                    if not history:
-                        st.info("No price history for this product at this store.")
-                    else:
-                        for h in history:
-                            with st.container():
-                                col1, col2 = st.columns([4, 1])
-                                with col1:
-                                    st.markdown(f"**Date:** {h['date']} | **Price:** RM {h['price']:.2f}")
-                                with col2:
-                                    if st.button("🗑️ Delete", key=f"del_price_{h['id']}", help="Delete this specific price record"):
-                                        df_prices = db._read_sheet("Prices")
-                                        df_prices = df_prices[df_prices["id"] != h['id']]
-                                        db._write_sheet("Prices", df_prices)
-                                        st.toast(f"Deleted price record from {h['date']}", icon="🗑️")
-                                        st.rerun()
-                                st.divider()
 
